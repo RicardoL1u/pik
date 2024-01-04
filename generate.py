@@ -43,6 +43,7 @@ generation_options = {
 	'temperature': args.temperature,
 	'do_sample': True,
 	'pad_token_id': args.pad_token_id,
+	'n': args.n_answers_per_question,
 	# 'eos_token_id': 198,	# Stop generating more tokens when the model generates '\n'
 	# 'eos_token_id': 13,	# Stop generating more tokens when the model generates '.'
 }
@@ -54,7 +55,7 @@ data_ids = torch.randperm(len(data))
 if args.n_questions > 0:
 	data_ids = data_ids[:args.n_questions]
 data_ids = data_ids.cpu().numpy().tolist()
-model = Model(args.model_checkpoint, precision=args.precision)
+model = Model(args.model_checkpoint, precision=args.precision,generation_options=generation_options)
 
 ### Start generating
 results = pd.DataFrame()
@@ -75,8 +76,8 @@ for i in progress_bar:
 	else:
 		all_hidden_states = torch.cat((all_hidden_states, hidden_state.unsqueeze(0)), dim=0)
 	# Generate multiple model answers
-	for n in range(args.n_answers_per_question):
-		model_answer = model.get_text_generation(text_input, generation_options=generation_options)
+	model_answers = model.get_text_generation(text_input)
+	for n, model_answer in enumerate(model_answers):
 		eval = evaluate_answer(model_answer, answer)
 		# Record results in memory
 		df_idx = results.shape[0]
