@@ -9,7 +9,7 @@ import seaborn as sns
 import torch
 from IPython.display import display
 from torch.utils.data import DataLoader, Subset
-from tqdm.notebook import tqdm, trange
+from tqdm import tqdm, trange
 from pik.datasets.hidden_states_dataset import HiddenStatesDataset
 from pik.models.linear_probe import LinearProbe
 
@@ -42,13 +42,23 @@ dataset = HiddenStatesDataset(
 		precision=args.precision,
 		last_layer_only=True,
 		device=device)
+
+print("There are {} hidden states".format(dataset.hidden_states.shape[0]))
+
 permuted_hids = torch.randperm(dataset.hidden_states.shape[0]).tolist()
 train_len = int(args.train_frac * dataset.hidden_states.shape[0])
 train_hids, test_hids = permuted_hids[:train_len], permuted_hids[train_len:]
+print("There are {} train hids".format(len(train_hids)))
+print("There are {} test hids".format(len(test_hids)))
+
 
 # Map hidden_states IDs (hids) to dataset IDs
 train_indices = dataset.text_generations.query('hid in @train_hids').index.tolist()
 test_indices = dataset.text_generations.query('hid in @test_hids').index.tolist()
+
+print("There are {} train indices".format(len(train_indices)))
+print("There are {} test indices".format(len(test_indices)))
+
 train_set = Subset(dataset, train_indices)
 test_set = Subset(dataset, test_indices)
 train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
@@ -70,6 +80,8 @@ for _ in outer_bar:
 	# Loop through samples
 	inner_bar = tqdm(train_loader, leave=False)
 	for hs, label in inner_bar:
+		# print("hi")
+    
 		# Prep inputs
 		hs = hs.to(device)
 		label = label.unsqueeze(1).type(args.precision).to(device)
@@ -104,13 +116,21 @@ for _ in outer_bar:
 	test_losses.append(test_loss)
 	outer_bar.set_description(f'train_loss: {train_loss:.4f}, test_loss: {test_loss:.4f}')
 
+
+
+# Create directory for figures
+figures_dir = 'figures'
+os.makedirs(figures_dir, exist_ok=True)
+
 # Plot train/test loss
 df = pd.DataFrame()
 df['train_loss'] = train_losses
 df['test_loss'] = test_losses
 df.index.name = 'epoch'
 print('Train/test loss:')
-df.plot()
+fig = df.plot().get_figure()
+fig.savefig(os.path.join(figures_dir, 'train_test_loss.png'))
+
 
 # Get predictions
 all_hs = dataset.hidden_states
@@ -146,7 +166,9 @@ display(calib.head())
 
 # Plot calibration
 sns.set(font_scale=1.2)
-sns.relplot(data=calib, x='evaluation', y='prediction', hue='split', aspect=1.0, height=6)
+calibration_plot = sns.relplot(data=calib, x='evaluation', y='prediction', hue='split', aspect=1.0, height=6)
+calibration_plot.savefig(os.path.join(figures_dir, 'calibration_plot.png'))
+
 
 # Brier scores
 brier_train = (
@@ -168,10 +190,13 @@ calib_train = (
 	[['evaluation', 'prediction']]
 	.groupby('evaluation').mean()
 )
-sns.relplot(data=calib_train, x='evaluation', y='prediction', aspect=1.0, height=6)
+train_calib_plot = sns.relplot(data=calib_train, x='evaluation', y='prediction', aspect=1.0, height=6)
+train_calib_plot.savefig(os.path.join(figures_dir, 'calib_train_plot.png'))
+
 calib_test = (
 	calib.query('split == "test"')
 	[['evaluation', 'prediction']]
 	.groupby('evaluation').mean()
 )
-sns.relplot(data=calib_test, x='evaluation', y='prediction', aspect=1.0, height=6)
+test_calib_plot = sns.relplot(data=calib_test, x='evaluation', y='prediction', aspect=1.0, height=6)
+test_calib_plot.savefig(os.path.join(figures_dir, 'calib_test_plot.png'))
