@@ -8,7 +8,25 @@ class Model:
 	Loads a language model from HuggingFace.
 	Implements methods to extract the hidden states and generate text from a given input.
 	'''
-	def __init__(self, model_checkpoint ,generation_options, precision=torch.float16, device='cuda'):
+	def __init__(self, model_checkpoint ,generation_options, mode='lazy', precision=torch.float16, device='cuda'):
+		self.sampling_params = SamplingParams(
+			n=generation_options.get('n', 1),
+			max_tokens=generation_options.get('max_new_tokens', 16),
+			temperature=generation_options.get('temperature', 1),
+			top_k=generation_options.get('top_k', 50),
+			top_p=generation_options.get('top_p', 1),
+			# pad_token_id=generation_options.get('pad_token_id', 50256),
+			# eos_token_id=generation_options.get('eos_token_id', 198),
+		)
+
+		self.tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+		self.mode = mode
+		self.device = device
+		if mode == 'lazy':
+			# Load model later
+			self.model = None
+			self.vllm_model = None
+
 		if model_checkpoint == 'EleutherAI/gpt-j-6B':
 			config = AutoConfig.from_pretrained(model_checkpoint)
 			with init_empty_weights():
@@ -23,16 +41,6 @@ class Model:
 		else:
 			self.model = AutoModelForCausalLM.from_pretrained(model_checkpoint).to(device)
 		self.vllm_model = LLM(model=model_checkpoint, gpu_memory_utilization=0.4)
-		self.sampling_params = SamplingParams(
-			n=generation_options.get('n', 1),
-			max_tokens=generation_options.get('max_new_tokens', 16),
-			temperature=generation_options.get('temperature', 1),
-			top_k=generation_options.get('top_k', 50),
-			top_p=generation_options.get('top_p', 1),
-			# pad_token_id=generation_options.get('pad_token_id', 50256),
-			# eos_token_id=generation_options.get('eos_token_id', 198),
-		)
-		self.tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
 	def get_hidden_states(self, text_input, keep_all=True):
 		with torch.inference_mode():
@@ -51,7 +59,7 @@ class Model:
 	def get_text_generation(self, text_input, normalize=False):
 		# with torch.inference_mode():
 		# use vllm to generate text
-		generation = self.vllm_model.generate(text_input, self.sampling_params)
+		generation = self.vllm_model.generate(text_input, self.sampling_params,use_tqdm=False)
 
 		# extract 
 		output_text_list = [

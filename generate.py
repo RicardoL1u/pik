@@ -7,10 +7,12 @@ import pandas as pd
 import torch
 from IPython.display import display
 from time import time
-from tqdm import trange
+from tqdm import trange,tqdm
 from pik.datasets.triviaqa_dataset import TriviaQADataset
 from pik.models.model import Model
 from pik.utils import prompt_eng, evaluate_answer
+from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from vllm import LLM
 
 # Set params
 parser = argparse.ArgumentParser()
@@ -29,8 +31,8 @@ parser.add_argument('--data_folder', default='data', help='data folder')
 parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
 parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
 parser.add_argument('--qa_pairs_filename', default='qa_pairs.csv', help='filename for saving q-a pairs')
-parser.add_argument('--estimate', action='store_true', default=False, help='set to True to estimate time to completion')
-parser.add_argument('--n_test', type=int, default=3, help='number of questions to use for estimating time to completion')
+# parser.add_argument('--estimate', action='store_true', default=False, help='set to True to estimate time to completion')
+# parser.add_argument('--n_test', type=int, default=3, help='number of questions to use for estimating time to completion')
 args = parser.parse_args()
 args.precision = torch.float16 if args.precision == 'float16' else torch.float32
 torch.set_default_dtype(args.precision)
@@ -50,80 +52,117 @@ generation_options = {
 
 # Load dataset and model
 data = TriviaQADataset()
-torch.manual_seed(args.dataset_seed)
-data_ids = torch.randperm(len(data))
-if args.n_questions > 0:
-	data_ids = data_ids[:args.n_questions]
-data_ids = data_ids.cpu().numpy().tolist()
+# torch.manual_seed(args.dataset_seed)
+# data_ids = torch.randperm(len(data))
+# if args.n_questions == 0:
+#     args.n_questions = len(data_ids)
+# if args.n_questions > 0:
+# 	data_ids = data_ids[:args.n_questions]
+# data_ids = data_ids.cpu().numpy().tolist()
 model = Model(args.model_checkpoint, precision=args.precision,generation_options=generation_options)
 
 ### Start generating
 results = pd.DataFrame()
 start = time()
 all_hidden_states = None
-torch.manual_seed(args.generation_seed)
-progress_bar = trange(args.n_questions) if not args.estimate else trange(args.n_test)
-for i in progress_bar:
-	# Prep inputs
-	hid, qid = i, data_ids[i]
-	question, answer = data[qid]
-	progress_bar.set_description(question)
-	text_input = prompt_eng(question)
-	# Get hidden state
+# torch.manual_seed(args.generation_seed)
+
+text_input_list = []
+for question, answer in data:
+	text_input_list.append(prompt_eng(question, 10, data))
+
+if model.mode == 'lazy':
+    model.model = AutoModelForCausalLM.from_pretrained(args.model_checkpoint).to(model.device)
+
+hidden_states = None
+for text_input in tqdm(text_input_list,desc='Pre-generating hidden states'):
 	hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
-	if hid == 0:
-		all_hidden_states = hidden_state.unsqueeze(0)
+	if hidden_states is None:
+		hidden_states = hidden_state.unsqueeze(0)
 	else:
-		all_hidden_states = torch.cat((all_hidden_states, hidden_state.unsqueeze(0)), dim=0)
-	# Generate multiple model answers
+		hidden_states = torch.cat((hidden_states, hidden_state.unsqueeze(0)), dim=0)
+
+if model.mode == 'lazy':
+    # release memory
+    model.model = None
+    model.vllm_model = LLM(model=args.model_checkpoint, gpu_memory_utilization=0.9)
+
+
+for idx, text_input in tqdm(enumerate(text_input_list),desc='Generating text'):
 	model_answers = model.get_text_generation(text_input)
 	for n, model_answer in enumerate(model_answers):
 		eval = evaluate_answer(model_answer, answer)
 		# Record results in memory
 		df_idx = results.shape[0]
-		results.loc[df_idx, 'hid'] = hid
-		results.loc[df_idx, 'qid'] = qid
+		results.loc[df_idx, 'hid'] = idx
+		results.loc[df_idx, 'qid'] = idx
 		results.loc[df_idx, 'n'] = n
 		results.loc[df_idx, 'model_answer'] = model_answer
 		results.loc[df_idx, 'evaluation'] = eval
-	# Periodically write results to disk
-	if not args.estimate and (hid + 1) % args.save_frequency == 0 and (hid + 1) != args.save_frequency:
-		torch.save(all_hidden_states, args.hidden_states_filename)
-		for col in results.columns:
-			if col != 'model_answer':
-				results[col] = results[col].astype(int)
-		results.to_csv(args.text_generations_filename, index=False)
-		print('-------------')
-		print(results)
-		print(args.text_generations_filename)
+
+
+# progress_bar = trange(args.n_questions) if not args.estimate else trange(args.n_test)
+# for i in progress_bar:
+# 	# Prep inputs
+# 	hid, qid = i, data_ids[i]
+# 	question, answer = data[qid]
+# 	progress_bar.set_description(question)
+# 	text_input = prompt_eng(question, 10, data)
+# 	# Get hidden state
+# 	hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
+# 	if hid == 0:
+# 		all_hidden_states = hidden_state.unsqueeze(0)
+# 	else:
+# 		all_hidden_states = torch.cat((all_hidden_states, hidden_state.unsqueeze(0)), dim=0)
+# 	# Generate multiple model answers
+# 	model_answers = model.get_text_generation(text_input)
+# 	for n, model_answer in enumerate(model_answers):
+# 		eval = evaluate_answer(model_answer, answer)
+# 		# Record results in memory
+# 		df_idx = results.shape[0]
+# 		results.loc[df_idx, 'hid'] = hid
+# 		results.loc[df_idx, 'qid'] = qid
+# 		results.loc[df_idx, 'n'] = n
+# 		results.loc[df_idx, 'model_answer'] = model_answer
+# 		results.loc[df_idx, 'evaluation'] = eval
+# 	# Periodically write results to disk
+# 	if not args.estimate and (hid + 1) % args.save_frequency == 0 and (hid + 1) != args.save_frequency:
+# 		torch.save(all_hidden_states, args.hidden_states_filename)
+# 		for col in results.columns:
+# 			if col != 'model_answer':
+# 				results[col] = results[col].astype(int)
+# 		results.to_csv(args.text_generations_filename, index=False)
+# 		print('-------------')
+# 		print(results)
+# 		print(args.text_generations_filename)
 
 # Estimate time to completion and disk usage if `--estimate` is set, then exit
-if args.estimate:
-	time_taken = time() - start
-	num_floats = args.n_questions
-	for dim in all_hidden_states.shape[1:]:
-		num_floats *= dim
-	bytes_per_float = 2 if args.precision == torch.float16 else 4
-	print(f'''n={args.n_test} questions
-	{args.n_answers_per_question} generations per question
-	{generation_options['max_new_tokens']} new tokens per generation
-	-------------------------------------
-	Average processing time per question:
-	{time_taken / args.n_questions :.2f} seconds
+# if args.estimate:
+# 	time_taken = time() - start
+# 	num_floats = args.n_questions
+# 	for dim in all_hidden_states.shape[1:]:
+# 		num_floats *= dim
+# 	bytes_per_float = 2 if args.precision == torch.float16 else 4
+# 	print(f'''n={args.n_test} questions
+# 	{args.n_answers_per_question} generations per question
+# 	{generation_options['max_new_tokens']} new tokens per generation
+# 	-------------------------------------
+# 	Average processing time per question:
+# 	{time_taken / args.n_questions :.2f} seconds
 
-	Estimated duration (give or take) to process all {args.n_questions} questions:
-	{(time_taken / args.n_test) * args.n_questions / 3600 :.3f} hours
+# 	Estimated duration (give or take) to process all {args.n_questions} questions:
+# 	{(time_taken / args.n_test) * args.n_questions / 3600 :.3f} hours
 	
-	Estimated disk usage for {args.hidden_states_filename}:
-	{(num_floats * bytes_per_float) / 1e6:.3f} MB''')
-	exit()
+# 	Estimated disk usage for {args.hidden_states_filename}:
+# 	{(num_floats * bytes_per_float) / 1e6:.3f} MB''')
+# 	exit()
 
 # Generate q-a pairs df
 qa_pairs = pd.DataFrame()
-for qid in data_ids:
-	q, a = data[qid]
+for idx in range(len(data)):
+	q, a = data[idx]
 	df_idx = qa_pairs.shape[0]
-	qa_pairs.loc[df_idx, 'qid'] = qid
+	qa_pairs.loc[df_idx, 'qid'] = idx
 	qa_pairs.loc[df_idx, 'question'] = q
 	qa_pairs.loc[df_idx, 'answer'] = a
 qa_pairs['qid'] = qa_pairs['qid'].astype(int)
