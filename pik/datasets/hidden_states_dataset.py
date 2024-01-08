@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import torch
 from torch.utils.data import Dataset
 
@@ -21,6 +22,10 @@ class HiddenStatesDataset(Dataset):
 			hs = hs[:, -1, :]
 		self.hidden_states = hs
 		self.text_generations = pd.read_csv(tg_file)
+		self.pik_labels = np.array([
+			self.text_generations.query('hid == @hid')['evaluation'].mean()
+   			for hid in range(self.hidden_states.shape[0])
+		])
 
 	def __len__(self):
 		return self.text_generations.shape[0]
@@ -31,3 +36,6 @@ class HiddenStatesDataset(Dataset):
 			self.hidden_states[hid],
 			self.text_generations.loc[i, 'evaluation']
 		)
+  
+	def get_pik_label(self, hid):
+		return self.pik_labels[hid]
