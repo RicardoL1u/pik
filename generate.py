@@ -13,6 +13,7 @@ from pik.models.model import Model
 from pik.utils import prompt_eng, evaluate_answer
 from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
 from vllm import LLM
+from pik.models.model import load_model
 
 # Set params
 parser = argparse.ArgumentParser()
@@ -72,20 +73,31 @@ for question, answer in data:
 	text_input_list.append(prompt_eng(question, 10, data))
 
 if model.mode == 'lazy':
-    model.model = AutoModelForCausalLM.from_pretrained(args.model_checkpoint).to(model.device)
+    model.model = load_model(args.model_checkpoint, is_vllm=False)
 
 hidden_states = None
-for text_input in tqdm(text_input_list,desc='Pre-generating hidden states'):
+hidden_states_host = None
+for idx, text_input in tqdm(enumerate(text_input_list),desc='Pre-generating hidden states', total=len(text_input_list)):
 	hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
 	if hidden_states is None:
 		hidden_states = hidden_state.unsqueeze(0)
 	else:
 		hidden_states = torch.cat((hidden_states, hidden_state.unsqueeze(0)), dim=0)
+	# periodically move hidden states to cpu
+	if hidden_states.shape[0] % 100 == 0 or idx == len(text_input_list) - 1:
+		if hidden_states_host is None:
+			hidden_states_host = hidden_states.cpu()
+		else:
+			hidden_states_host = torch.cat((hidden_states_host, hidden_states.cpu()), dim=0)
+		hidden_states = None
+
+torch.save(hidden_states_host, args.hidden_states_filename)
+
 
 if model.mode == 'lazy':
     # release memory
     model.model = None
-    model.vllm_model = LLM(model=args.model_checkpoint, gpu_memory_utilization=0.9)
+    model.vllm_model = load_model(args.model_checkpoint, is_vllm=True)
 
 
 for idx, text_input in tqdm(enumerate(text_input_list),desc='Generating text'):
@@ -174,9 +186,9 @@ for col in results.columns:
 		results[col] = results[col].astype(int)
 display(results.head())
 print('Mean evaluation score:', results.evaluation.mean())
-print('Hidden states shape:', all_hidden_states.shape)
+print('Hidden states shape:', hidden_states_host.shape)
 
 # Write final results to disk
-torch.save(all_hidden_states, args.hidden_states_filename)
+# torch.save(hidden_states_host, args.hidden_states_filename)
 results.to_csv(args.text_generations_filename, index=False)
 qa_pairs.to_csv(args.qa_pairs_filename, index=False)
