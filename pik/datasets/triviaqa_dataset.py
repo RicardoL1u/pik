@@ -10,7 +10,7 @@ class TriviaQADataset(Dataset):
 	'''
 	def __init__(self):
 		# Takes about 20-40 mins to download + extract first time around
-		self.dataset = load_dataset('trivia_qa', 'rc', split='validation')
+		self.dataset = load_dataset('data/trivia_qa', 'rc', split='validation')
 
 	def __len__(self):
 		return self.dataset.num_rows
