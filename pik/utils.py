@@ -21,8 +21,7 @@ def build_few_shot(dataset, n=0):
 	prompt = ''
 	indices = torch.randperm(len(dataset))[:n].cpu().numpy().tolist()
 	for i in range(n):
-		question = dataset[indices[i]]['question']
-		answer = dataset[indices[i]]['answer']['value']
+		question, answer = dataset[indices[i]]
 		prompt += XSHOT_TEMPLATE.format(question=question, answer=answer)
 	return prompt
 
