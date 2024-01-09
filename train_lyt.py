@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 import wandb
+from pik.utils import wandb_log
+import logging
 # Function Definitions
 
 def parse_arguments():
@@ -22,6 +24,7 @@ def parse_arguments():
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning rate')
     parser.add_argument('--precision', default='float16', help='model precision')
     parser.add_argument('--device', default='cuda:0', help='device to run on')
+    parser.add_argument('--use_wandb', action='store_true', default=False, help='set to True to use wandb')
     # parser.add_argument('--data_folder', default='data', help='data folder')
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
@@ -30,6 +33,7 @@ def parse_arguments():
 class Trainer:
     def __init__(self, args):
         self.args = args
+        self.use_wandb = args.use_wandb
         self.args.precision = torch.float16 if args.precision == 'float16' else torch.float32
         torch.set_default_dtype(args.precision)
         
@@ -56,9 +60,9 @@ class Trainer:
         self.test_hids = \
             permuted_hids[:train_len], permuted_hids[train_len:train_len+val_len], permuted_hids[train_len+val_len:]
         
-        print("There are {} train hids".format(len(self.train_hids)))
-        print("There are {} val hids".format(len(self.val_hids)))
-        print("There are {} test hids".format(len(self.test_hids)))
+        wandb_log(logging.INFO, self.use_wandb, "There are {} train hids".format(len(self.train_hids)))
+        wandb_log(logging.INFO, self.use_wandb, "There are {} val hids".format(len(self.val_hids)))
+        wandb_log(logging.INFO, self.use_wandb, "There are {} test hids".format(len(self.test_hids)))
         
         train_indices = self.dataset.text_generations.query('hid in @self.train_hids').index.tolist()
         val_indices = self.dataset.text_generations.query('hid in @self.val_hids').index.tolist()
@@ -68,7 +72,8 @@ class Trainer:
         self.train_loader = DataLoader(Subset(self.dataset, train_indices), batch_size=args.batch_size, shuffle=True)
         self.val_loader = DataLoader(Subset(self.dataset, val_indices), batch_size=args.batch_size, shuffle=True)
         self.test_loader = DataLoader(Subset(self.dataset, test_indices), batch_size=args.batch_size, shuffle=True)
-        wandb.init(project="pik")
+        if self.use_wandb:
+            wandb.init(project="pik", name=args.wandb_run_name)
         
     def trainning_loop(self):
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.learning_rate)
@@ -99,12 +104,13 @@ class Trainer:
             train_metrics.append(train_brier)
             val_metrics.append(val_brier)
             test_metrics.append(test_brier)
-            wandb.log({"epoch": epoch, "train_loss": running_loss / len(self.train_loader),
+            wandb_log(logging.INFO, self.use_wandb, score_dict={"epoch": epoch, "train_loss": running_loss / len(self.train_loader),
                        "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier})
         all_preds, all_labels = self.prediction()
         self.plot_scatters_to_wandb(all_preds, all_labels)
         # Close wandb run
-        wandb.finish()   
+        if self.use_wandb:
+            wandb.finish()   
         return train_losses, train_metrics, val_metrics, test_metrics
 
     def prediction(self):
@@ -132,13 +138,15 @@ class Trainer:
         df.loc[self.train_hids, 'split'] = 'train'
         df.loc[self.val_hids, 'split'] = 'val'
         
-        
-        wandb.log({"train scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'train']),
-                                                "evaluation", "prediction", title="Train Scatter")})
-        wandb.log({"val scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'val']),
-                                                "evaluation", "prediction", title="Val Scatter")})
-        wandb.log({"test scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'test']), 
-                                                "evaluation", "prediction", title="Test Scatter")})
+        # save the dataframe to local
+        df.to_csv("scatter.csv")
+        if self.use_wandb:
+            wandb.log({"train scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'train']),
+                                                    "evaluation", "prediction", title="Train Scatter")})
+            wandb.log({"val scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'val']),
+                                                    "evaluation", "prediction", title="Val Scatter")})
+            wandb.log({"test scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'test']), 
+                                                    "evaluation", "prediction", title="Test Scatter")})
     
     # def validate_model(model, val_loader, args):
     #     loss_fn = torch.nn.BCELoss()
