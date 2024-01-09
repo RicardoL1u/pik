@@ -4,6 +4,7 @@ from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
 from pik.utils import normalize_answer
 from vllm import LLM, SamplingParams
 import re
+from typing import List
 def is_large_model(model_checkpoint):
     model_checkpoint = model_checkpoint.lower()
     # the model parameter is a string like 24B, 6B, 13B, etc.
@@ -23,7 +24,7 @@ def load_model(model_checkpoint, is_vllm=False):
         if is_vllm:
             return LLM(model=model_checkpoint)
         else:
-            return AutoModelForCausalLM.from_pretrained(model_checkpoint)
+            return AutoModelForCausalLM.from_pretrained(model_checkpoint).to('cuda')
 
 class Model:
     '''
@@ -93,5 +94,25 @@ class Model:
             return [normalize_answer(output_text) for output_text in output_text_list]
         return output_text_list
 
+    def get_batch_text_generation(self, text_input_list:List[str], normalize=False):
+        # with torch.inference_mode():
+        # use vllm to generate text
+        generation = self.vllm_model.generate(text_input_list, self.sampling_params)
+
+        # extract 
+        output_text_list = [
+            [
+                output.text
+                for output in gene.outputs
+            ]
+            for gene in generation
+        ]
+        if normalize:
+            return [
+                [normalize_answer(output_text) for output_text in output_text_list]
+                for output_text_list in output_text_list
+            ]
+        return output_text_list
+    
     def parameters(self):
         return self.model.parameters()
