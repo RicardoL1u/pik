@@ -7,11 +7,10 @@ import re
 from typing import List
 def is_large_model(model_checkpoint):
     model_checkpoint = model_checkpoint.lower()
-    # the model parameter is a string like 24B, 6B, 13B, etc.
-    # use regex to extract the number
-    model_size = re.search(r'\d+b', model_checkpoint).group(0)
-    # only keep the number
-    model_size = int(model_size[:-1])
+    # Using regex to extract the number which may have a decimal part
+    model_size = re.search(r'\d+(\.\d+)?b', model_checkpoint).group(0)
+    # Convert the extracted string to float
+    model_size = float(model_size[:-1])
     return model_size > 13
 
 def load_model(model_checkpoint, is_vllm=False):
