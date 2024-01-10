@@ -22,10 +22,12 @@ class HiddenStatesDataset(Dataset):
             hs = hs[:, -1, :]
         self.hidden_states = hs
         self.text_generations = pd.read_csv(tg_file)
-        self.pik_labels = np.array([
-            self.text_generations.query('hid == @hid')['evaluation'].mean()
-               for hid in range(self.hidden_states.shape[0])
-        ])
+        
+        # Compute mean evaluations for each 'hid' in a more efficient way
+        mean_evaluations = self.text_generations.groupby('hid')['evaluation'].mean().to_dict()
+
+        # Create pik_labels using a vectorized operation
+        self.pik_labels = np.array([mean_evaluations.get(hid, np.nan) for hid in range(self.hidden_states.shape[0])])
 
     def __len__(self):
         return self.text_generations.shape[0]
