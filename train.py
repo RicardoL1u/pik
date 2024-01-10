@@ -29,6 +29,7 @@ def parse_arguments():
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
     parser.add_argument('--output_dir', required=True, help='output directory')
+    parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     return parser.parse_args()
 
 class Trainer:
@@ -160,7 +161,7 @@ class Trainer:
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
         test_evals = df[df['split'] == 'test']['evaluation'].tolist()
         
-        plot_calibration(test_evals, test_preds, os.path.join(self.args.output_dir, 'calibration.png'))
+        plot_calibration(test_evals, test_preds, file_name=os.path.join(self.args.output_dir, 'calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
     # def validate_model(model, val_loader, args):
     #     loss_fn = torch.nn.BCELoss()
