@@ -1,202 +1,240 @@
-'''
-Train a linear probe on the hidden states of a model, generated and saved by `generate.py`.
-'''
 import argparse
-import matplotlib.pyplot as plt
-import os
 import pandas as pd
-import seaborn as sns
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
-from IPython.display import display
 from torch.utils.data import DataLoader, Subset
-from tqdm import tqdm, trange
 from pik.datasets.hidden_states_dataset import HiddenStatesDataset
 from pik.models.linear_probe import LinearProbe
+from tqdm import tqdm
+import os
+import wandb
+from pik.utils import wandb_log
+from try_to_plot import plot_calibration, plot_and_save_scatter
+import logging
+# Function Definitions
 
-# Set params
-parser = argparse.ArgumentParser()
-parser.add_argument('--split_seed', type=int, default=101, help='seed for splitting hidden states into train and test')
-parser.add_argument('--train_seed', type=int, default=8421, help='seed for train reproducibility')
-parser.add_argument('--train_frac', type=float, default=0.75, help='fraction of hidden states to use for training')
-parser.add_argument('--num_epochs', type=int, default=100, help='number of epochs to train for')
-parser.add_argument('--batch_size', type=int, default=25, help='batch size')
-parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning rate')
-parser.add_argument('--precision', default='float16', help='model precision')
-parser.add_argument('--data_folder', default='data', help='data folder')
-parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
-parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
-args = parser.parse_args()
-args.precision = torch.float16 if args.precision == 'float16' else torch.float32
-torch.set_default_dtype(args.precision)
-args.hidden_states_filename = '{}/{}'.format(args.data_folder, args.hidden_states_filename)
-args.text_generations_filename = '{}/{}'.format(args.data_folder, args.text_generations_filename)
-assert os.path.exists(args.hidden_states_filename)
-assert os.path.exists(args.text_generations_filename)
-device = 'cpu' if not torch.cuda.is_available() else 'cuda:0'
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--split_seed', type=int, default=101, help='seed for splitting hidden states into train and test')
+    parser.add_argument('--train_seed', type=int, default=8421, help='seed for train reproducibility')
+    parser.add_argument('--train_frac', type=float, default=0.8, help='fraction of hidden states to use for training')
+    parser.add_argument('--num_epochs', type=int, default=100, help='number of epochs to train for')
+    parser.add_argument('--batch_size', type=int, default=25, help='batch size')
+    parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning rate')
+    parser.add_argument('--precision', default='float16', help='model precision')
+    parser.add_argument('--device', default='cuda:0', help='device to run on')
+    parser.add_argument('--use_wandb', action='store_true', default=False, help='set to True to use wandb')
+    # parser.add_argument('--data_folder', default='data', help='data folder')
+    parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
+    parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
+    parser.add_argument('--output_dir', required=True, help='output directory')
+    return parser.parse_args()
 
-# Load dataset and split hidden_states into train and test
-torch.manual_seed(args.split_seed)
-dataset = HiddenStatesDataset(
-		hs_file=args.hidden_states_filename,
-		tg_file=args.text_generations_filename,
-		precision=args.precision,
-		last_layer_only=True,
-		device=device)
+class Trainer:
+    def __init__(self, args):
+        self.args = args
+        self.use_wandb = args.use_wandb
+        self.args.precision = torch.float16 if args.precision == 'float16' else torch.float32
+        torch.set_default_dtype(args.precision)
+        
+        # Load dataset...
+        self.dataset = HiddenStatesDataset(
+            hs_file=args.hidden_states_filename,
+            tg_file=args.text_generations_filename,
+            precision=args.precision,
+            last_layer_only=True,
+            device=args.device)
+        
+        self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
+        
+        # Split dataset into training and testing...
+   
+        permuted_hids = torch.randperm(self.dataset.hidden_states.shape[0]).tolist()
+        train_len = int(args.train_frac * self.dataset.hidden_states.shape[0])
+        
+        # the rest hidden states are used for testing and validation
+        val_len = int((1 - args.train_frac) * self.dataset.hidden_states.shape[0]) // 2
+        test_len = int((1 - args.train_frac) * self.dataset.hidden_states.shape[0]) - val_len
+        self.train_hids, \
+        self.val_hids, \
+        self.test_hids = \
+            permuted_hids[:train_len], permuted_hids[train_len:train_len+val_len], permuted_hids[train_len+val_len:]
+        
+        wandb_log(logging.INFO, self.use_wandb, "There are {} train hids".format(len(self.train_hids)))
+        wandb_log(logging.INFO, self.use_wandb, "There are {} val hids".format(len(self.val_hids)))
+        wandb_log(logging.INFO, self.use_wandb, "There are {} test hids".format(len(self.test_hids)))
+        
+        train_indices = self.dataset.text_generations.query('hid in @self.train_hids').index.tolist()
+        val_indices = self.dataset.text_generations.query('hid in @self.val_hids').index.tolist()
+        test_indices = self.dataset.text_generations.query('hid in @self.test_hids').index.tolist()
+        
+        # Create DataLoader for train and test sets...
+        self.train_loader = DataLoader(Subset(self.dataset, train_indices), batch_size=args.batch_size, shuffle=True)
+        self.val_loader = DataLoader(Subset(self.dataset, val_indices), batch_size=args.batch_size, shuffle=True)
+        self.test_loader = DataLoader(Subset(self.dataset, test_indices), batch_size=args.batch_size, shuffle=True)
+        if self.use_wandb:
+            wandb.init(project="pik", name=args.wandb_run_name)
+        
+    def trainning_loop(self):
+        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.learning_rate)
+        loss_fn = torch.nn.BCELoss()
+        train_losses = []
 
-print("There are {} hidden states".format(dataset.hidden_states.shape[0]))
+        train_metrics = []
+        val_metrics = []
+        test_metrics = []
+        
+        self.model.train()
+        for epoch in tqdm(range(self.args.num_epochs)):
+            running_loss = 0.0
+            for hs, labels in tqdm(self.train_loader, leave=False):
+                hs = hs.to(self.args.device)
+                labels = labels.unsqueeze(1).type(self.args.precision).to(self.args.device)
+                optimizer.zero_grad()
+                outputs = self.model(hs)
+                loss = loss_fn(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                running_loss += loss.item()
+            train_losses.append(running_loss / len(self.train_loader))
+            
+            # validate model
+            all_preds, all_labels = self.prediction()
+            train_brier, val_brier, test_brier = self.calculate_metrics(all_preds, all_labels)
+            train_metrics.append(train_brier)
+            val_metrics.append(val_brier)
+            test_metrics.append(test_brier)
+            wandb_log(logging.INFO, self.use_wandb, score_dict={"epoch": epoch, "train_loss": running_loss / len(self.train_loader),
+                       "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier})
+        all_preds, all_labels = self.prediction()
+        self.plot_scatters_to_wandb(all_preds, all_labels)
+        # Close wandb run
+        if self.use_wandb:
+            wandb.finish()   
+        return train_losses, train_metrics, val_metrics, test_metrics
 
-permuted_hids = torch.randperm(dataset.hidden_states.shape[0]).tolist()
-train_len = int(args.train_frac * dataset.hidden_states.shape[0])
-train_hids, test_hids = permuted_hids[:train_len], permuted_hids[train_len:]
-print("There are {} train hids".format(len(train_hids)))
-print("There are {} test hids".format(len(test_hids)))
-
-
-# Map hidden_states IDs (hids) to dataset IDs
-train_indices = dataset.text_generations.query('hid in @train_hids').index.tolist()
-test_indices = dataset.text_generations.query('hid in @test_hids').index.tolist()
-
-print("There are {} train indices".format(len(train_indices)))
-print("There are {} test indices".format(len(test_indices)))
-
-train_set = Subset(dataset, train_indices)
-test_set = Subset(dataset, test_indices)
-train_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
-test_loader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True)
-
-# Train linear probe
-torch.manual_seed(args.train_seed)
-model = LinearProbe(dataset.hidden_states.shape[-1]).to(device)
-optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
-loss_fn = torch.nn.BCELoss()
-train_losses = []
-test_losses = []
-model.train()
-outer_bar = trange(args.num_epochs)
-for _ in outer_bar:
-	# Reset train metrics
-	running_train_loss = 0
-	running_train_count = 0
-	# Loop through samples
-	inner_bar = tqdm(train_loader, leave=False)
-	for hs, label in inner_bar:
-		# print("hi")
+    def prediction(self):
+        all_hs = self.dataset.hidden_states
+        self.model.eval()
+        with torch.inference_mode():
+            all_preds = self.model(all_hs).detach().cpu().numpy().squeeze()
+        all_labels = self.dataset.pik_labels
+        return all_preds, all_labels
+        
+    def calculate_metrics(self, preds, labels):
+        # calculate brier score
+        # for train set
+        train_brier = np.mean((labels[self.train_hids] - preds[self.train_hids]) ** 2)
+        # for val set
+        val_brier = np.mean((labels[self.val_hids] - preds[self.val_hids]) ** 2)
+        # for test set
+        test_brier = np.mean((labels[self.test_hids] - preds[self.test_hids]) ** 2)
+        return train_brier, val_brier, test_brier
     
-		# Prep inputs
-		hs = hs.to(device)
-		label = label.unsqueeze(1).type(args.precision).to(device)
-		# Zero grads
-		optimizer.zero_grad()
-		# Forward pass
-		preds = model(hs)
-		# Get loss
-		loss = loss_fn(preds, label)
-		loss.backward()
-		# Update weights
-		optimizer.step()
-		# Running train metrics
-		running_train_loss += loss.item() * hs.shape[0]
-		running_train_count += hs.shape[0]
-		inner_bar.set_description(f'batch_train_loss: {loss.item():.4f}')
-	# Update train metrics
-	train_loss = running_train_loss / running_train_count
-	train_losses.append(train_loss)
-	# Get and update test metrics
-	running_test_loss = 0
-	running_test_count = 0
-	# Evaluate on test set
-	for test_hs, test_label in test_loader:
-		test_hs = test_hs.to(device)
-		test_label = test_label.unsqueeze(1).type(args.precision).to(device)
-		with torch.inference_mode():
-			test_preds = model(test_hs)
-		running_test_loss += loss_fn(test_preds, test_label).item() * test_hs.shape[0]
-		running_test_count += test_hs.shape[0]
-	test_loss = running_test_loss / running_test_count
-	test_losses.append(test_loss)
-	outer_bar.set_description(f'train_loss: {train_loss:.4f}, test_loss: {test_loss:.4f}')
+    def plot_scatters_to_wandb(self, preds, labels):
+        # plot scatter
+        df = pd.DataFrame({'evaluation': labels, 'prediction': preds})
+        df['split'] = 'test'
+        df.loc[self.train_hids, 'split'] = 'train'
+        df.loc[self.val_hids, 'split'] = 'val'
+    
+        
+        # save the dataframe to local
+        df.to_csv(os.path.join(self.args.output_dir, 'scatters.csv'), index=False)
+        if self.use_wandb:
+            wandb.log({"train scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'train']),
+                                                    "evaluation", "prediction", title="Train Scatter")})
+            wandb.log({"val scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'val']),
+                                                    "evaluation", "prediction", title="Val Scatter")})
+            wandb.log({"test scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'test']), 
+                                                    "evaluation", "prediction", title="Test Scatter")})
 
+        # get prediction and evaluation for each split
+        train_preds = df[df['split'] == 'train']['prediction'].tolist()
+        train_evals = df[df['split'] == 'train']['evaluation'].tolist()
+        
+        val_preds = df[df['split'] == 'val']['prediction'].tolist()
+        val_evals = df[df['split'] == 'val']['evaluation'].tolist()
+        
+        test_preds = df[df['split'] == 'test']['prediction'].tolist()
+        test_evals = df[df['split'] == 'test']['evaluation'].tolist()
+        
+        plot_calibration(test_evals, test_preds, os.path.join(self.args.output_dir, 'calibration.png'))
+        plot_and_save_scatter(df, self.args.output_dir)
+    # def validate_model(model, val_loader, args):
+    #     loss_fn = torch.nn.BCELoss()
+    #     val_losses = []
+    #     model.eval()
+    #     with torch.no_grad():
+    #         for hs, labels in tqdm(val_loader, leave=False):
+    #             hs, labels = hs.to(args.device), labels.to(args.device)
+    #             outputs = model(hs)
+    #             loss = loss_fn(outputs, labels)
+    #             val_losses.append(loss.item())
+    #     return val_losses
+    
 
+    # def evaluate_model(model, test_loader, args):
+    #     loss_fn = torch.nn.BCELoss()
+    #     test_losses = []
+    #     model.eval()
+    #     with torch.no_grad():
+    #         for hs, labels in tqdm(test_loader, leave=False):
+    #             hs, labels = hs.to(args.device), labels.to(args.device)
+    #             outputs = model(hs)
+    #             loss = loss_fn(outputs, labels)
+    #             test_losses.append(loss.item())
+    #     return test_losses
 
-# Create directory for figures
-figures_dir = 'figures'
-os.makedirs(figures_dir, exist_ok=True)
+# def plot_losses(train_losses, test_losses):
+#     plt.figure(figsize=(10, 5))
+#     plt.plot(train_losses, label='Train Loss')
+#     plt.plot(test_losses, label='Test Loss')
+#     plt.title('Training and Testing Losses')
+#     plt.xlabel('Epochs')
+#     plt.ylabel('Loss')
+#     plt.legend()
+#     plt.show()
 
-# Plot train/test loss
-df = pd.DataFrame()
-df['train_loss'] = train_losses
-df['test_loss'] = test_losses
-df.index.name = 'epoch'
-print('Train/test loss:')
-fig = df.plot().get_figure()
-fig.savefig(os.path.join(figures_dir, 'train_test_loss.png'))
+# def calculate_brier_scores(df):
+#     df['sq_errors'] = (df['evaluation'] - df['prediction']) ** 2
+#     train_brier = df[df['split'] == 'train']['sq_errors'].mean()
+#     test_brier = df[df['split'] == 'test']['sq_errors'].mean()
+#     return train_brier, test_brier
 
+# def plot_calibration(calib):
+#     sns.relplot(data=calib, x='evaluation', y='prediction', hue='split', aspect=1.0, height=6)
+#     plt.title('Calibration Plot')
+#     plt.xlabel('Evaluation')
+#     plt.ylabel('Prediction')
+#     plt.show()
 
-# Get predictions
-all_hs = dataset.hidden_states
-model.eval()
-with torch.inference_mode():
-	all_preds = model(all_hs).detach().cpu().numpy().squeeze()
+# Main Execution
 
-# Label which hidden states are train/test
-h2s = pd.DataFrame()
-for id in train_set.indices:
-	hid = dataset.text_generations.loc[id, 'hid']
-	h2s.loc[hid, 'split'] = 'train'
-for id in test_set.indices:
-	hid = dataset.text_generations.loc[id, 'hid']
-	h2s.loc[hid, 'split'] = 'test'
-h2s = h2s.sort_index()
-h2s.index.name = 'hid'
-h2s['prediction'] = all_preds
-h2s.split.value_counts()
-df = dataset.text_generations.merge(h2s, how='left', on='hid')
-print('Predictions')
-display(df.head())
+if __name__ == "__main__":
+    args = parse_arguments()
 
-# Evaluate calibration
-print('Evaluate calibration')
-calib = (
-	df[['hid', 'evaluation']]
-	.groupby('hid').mean()
-	.assign(prediction=all_preds)
-	.assign(split=h2s['split'])
-)
-display(calib.head())
+    # Ensure data files exist
+    assert os.path.exists(args.hidden_states_filename)
+    assert os.path.exists(args.text_generations_filename)
+    
+    trainer = Trainer(args)
 
-# Plot calibration
-sns.set(font_scale=1.2)
-calibration_plot = sns.relplot(data=calib, x='evaluation', y='prediction', hue='split', aspect=1.0, height=6)
-calibration_plot.savefig(os.path.join(figures_dir, 'calibration_plot.png'))
+    train_losses, train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
 
+    # train_loader, val_loader, test_loader, dataset = load_and_split_dataset(args)
 
-# Brier scores
-brier_train = (
-	df.query('split == "train"')
-	.assign(sq_errors=lambda x: (x.evaluation - x.prediction) ** 2)
-	['sq_errors'].mean()
-)
-brier_test = (
-	df.query('split == "test"')
-	.assign(sq_errors=lambda x: (x.evaluation - x.prediction) ** 2)
-	['sq_errors'].mean()
-)
-print(f'Train Brier score: {brier_train:.4f}')
-print(f'Test Brier score: {brier_test:.4f}')
+    # model = LinearProbe(dataset.hidden_states.shape[-1]).to(args.device)
+    # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
 
-# Plot calibration of training and test set
-calib_train = (
-	calib.query('split == "train"')
-	[['evaluation', 'prediction']]
-	.groupby('evaluation').mean()
-)
-train_calib_plot = sns.relplot(data=calib_train, x='evaluation', y='prediction', aspect=1.0, height=6)
-train_calib_plot.savefig(os.path.join(figures_dir, 'calib_train_plot.png'))
+    # train_losses = train_model(model, train_loader, args)
+    # test_losses = evaluate_model(model, test_loader, args)
 
-calib_test = (
-	calib.query('split == "test"')
-	[['evaluation', 'prediction']]
-	.groupby('evaluation').mean()
-)
-test_calib_plot = sns.relplot(data=calib_test, x='evaluation', y='prediction', aspect=1.0, height=6)
-test_calib_plot.savefig(os.path.join(figures_dir, 'calib_test_plot.png'))
+    # plot_losses(train_losses, test_losses)
+
+    # # Additional logic for predictions, calibration, and Brier scores
+    # train_brier, test_brier = calculate_brier_scores(df)
+    # print(f'Train Brier score: {train_brier:.4f}, Test Brier score: {test_brier:.4f}')
+
+    # plot_calibration(calib)
