@@ -35,9 +35,12 @@ def build_few_shot(dataset, n=0):
         raise ValueError('No dataset to build few-shot prompt from.')
     prompt = ''
     indices = torch.randperm(len(dataset))[:n].cpu().numpy().tolist()
+    example_list = []
     for i in range(n):
         question, answer = dataset[indices[i]]
-        prompt += XSHOT_TEMPLATE.format(question=question, answer=answer)
+        example_list.append(XSHOT_TEMPLATE.format(question=question, answer=answer))
+        # prompt += XSHOT_TEMPLATE.format(question=question, answer=answer)
+    prompt = '\n'.join(example_list)
     return prompt
 
 def prompt_eng(question, n=0, dataset=None):
@@ -45,7 +48,7 @@ def prompt_eng(question, n=0, dataset=None):
     Returns an x-shot prompt for the given question.
     If `n` is higher than 0, `dataset` must be provided.
     '''
-    return PREAMBLE + build_few_shot(dataset, n) + POSTAMBLE.format(question=question)
+    return PREAMBLE + build_few_shot(dataset, n) + '\n' + POSTAMBLE.format(question=question)
 
 def normalize_answer(s):
     '''
