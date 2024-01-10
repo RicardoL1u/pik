@@ -88,29 +88,29 @@ if args.debug:
 
 
 if os.path.exists(args.hidden_states_filename):
-	hidden_states_host = torch.load(args.hidden_states_filename)
-	print('Loaded hidden states from disk')
+    hidden_states_host = torch.load(args.hidden_states_filename)
+    logging.info('Loaded hidden states from disk')
 else:
-	if model.mode == 'lazy':
-		model.model = load_model(args.model_checkpoint, is_vllm=False)
+    if model.mode == 'lazy':
+        model.model = load_model(args.model_checkpoint, is_vllm=False)
 
-	hidden_states = None
-	hidden_states_host = None
-	for idx, text_input in tqdm(enumerate(text_input_list),desc='Pre-generating hidden states', total=len(text_input_list)):
-		hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
-		if hidden_states is None:
-			hidden_states = hidden_state.unsqueeze(0)
-		else:
-			hidden_states = torch.cat((hidden_states, hidden_state.unsqueeze(0)), dim=0)
-		# periodically move hidden states to cpu
-		if hidden_states.shape[0] % 100 == 0 or idx == len(text_input_list) - 1:
-			if hidden_states_host is None:
-				hidden_states_host = hidden_states.cpu()
-			else:
-				hidden_states_host = torch.cat((hidden_states_host, hidden_states.cpu()), dim=0)
-			hidden_states = None
+    hidden_states = None
+    hidden_states_host = None
+    for idx, text_input in tqdm(enumerate(text_input_list),desc='Pre-generating hidden states', total=len(text_input_list)):
+        hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
+        if hidden_states is None:
+            hidden_states = hidden_state.unsqueeze(0)
+        else:
+            hidden_states = torch.cat((hidden_states, hidden_state.unsqueeze(0)), dim=0)
+        # periodically move hidden states to cpu
+        if hidden_states.shape[0] % 100 == 0 or idx == len(text_input_list) - 1:
+            if hidden_states_host is None:
+                hidden_states_host = hidden_states.cpu()
+            else:
+                hidden_states_host = torch.cat((hidden_states_host, hidden_states.cpu()), dim=0)
+            hidden_states = None
 
-	torch.save(hidden_states_host, args.hidden_states_filename)
+    torch.save(hidden_states_host, args.hidden_states_filename)
 
 
 if model.mode == 'lazy':
