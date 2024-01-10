@@ -98,10 +98,10 @@ class Trainer:
                   format(len(self.train_loader) * self.args.num_epochs))
         
         step_now = 0
+        running_loss = 0.0
         self.model.train()
         for epoch in tqdm(range(self.args.num_epochs)):
-            running_loss = 0.0
-            for hs, labels in tqdm(self.train_loader, leave=False):
+            for hs, labels in self.train_loader:
                 hs = hs.to(self.args.device)
                 labels = labels.unsqueeze(1).type(self.args.precision).to(self.args.device)
                 optimizer.zero_grad()
@@ -113,7 +113,8 @@ class Trainer:
                 step_now += 1
                 if step_now % self.args.logging_steps == 0:
                     wandb_log(logging.INFO, self.use_wandb, 
-                              score_dict={"train_loss": running_loss / self.args.logging_steps},
+                              score_dict={"train_loss": running_loss / self.args.logging_steps,
+                                          "step": step_now},
                               step=step_now)
                     running_loss = 0.0
             # train_losses.append(running_loss / len(self.train_loader))
