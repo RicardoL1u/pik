@@ -77,8 +77,8 @@ all_hidden_states = None
 # torch.manual_seed(args.generation_seed)
 
 text_input_list = []
-for question, answer in data:
-	text_input_list.append(prompt_eng(question, 10, data))
+for question, _ in data:
+    text_input_list.append(prompt_eng(question, 10, data))
 
 if args.debug:
     text_input_list = text_input_list[:1000]
