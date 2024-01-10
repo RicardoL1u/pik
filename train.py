@@ -68,9 +68,11 @@ class Trainer:
         wandb_log(logging.INFO, self.use_wandb, "There are {} val hids".format(len(self.val_hids)))
         wandb_log(logging.INFO, self.use_wandb, "There are {} test hids".format(len(self.test_hids)))
         
-        train_indices = self.dataset.text_generations.query('hid in @self.train_hids').index.tolist()
-        val_indices = self.dataset.text_generations.query('hid in @self.val_hids').index.tolist()
-        test_indices = self.dataset.text_generations.query('hid in @self.test_hids').index.tolist()
+        # Assuming self.train_hids, self.val_hids, and self.test_hids are lists or sets
+        train_indices = self.dataset.text_generations[self.dataset.text_generations['hid'].isin(self.train_hids)].index.tolist()
+        val_indices = self.dataset.text_generations[self.dataset.text_generations['hid'].isin(self.val_hids)].index.tolist()
+        test_indices = self.dataset.text_generations[self.dataset.text_generations['hid'].isin(self.test_hids)].index.tolist()
+
         
         # Create DataLoader for train and test sets...
         self.train_loader = DataLoader(Subset(self.dataset, train_indices), batch_size=args.batch_size, shuffle=True)
