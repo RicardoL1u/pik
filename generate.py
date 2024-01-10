@@ -14,6 +14,13 @@ from pik.utils import prompt_eng, evaluate_answer
 from transformers import AutoConfig, AutoTokenizer, AutoModelForCausalLM
 from vllm import LLM
 from pik.models.model import load_model
+import logging
+import json
+logging.basicConfig(
+    format="[generate:%(filename)s:L%(lineno)d] %(levelname)-6s %(message)s",
+    level=logging.DEBUG
+)
+
 
 # Set params
 parser = argparse.ArgumentParser()
@@ -32,6 +39,7 @@ parser.add_argument('--data_folder', default='data', help='data folder')
 parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
 parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
 parser.add_argument('--qa_pairs_filename', default='qa_pairs.csv', help='filename for saving q-a pairs')
+parser.add_argument('--debug', action='store_true', default=False, help='set to True to enable debug mode')
 # parser.add_argument('--estimate', action='store_true', default=False, help='set to True to estimate time to completion')
 # parser.add_argument('--n_test', type=int, default=3, help='number of questions to use for estimating time to completion')
 args = parser.parse_args()
@@ -71,6 +79,12 @@ all_hidden_states = None
 text_input_list = []
 for question, answer in data:
 	text_input_list.append(prompt_eng(question, 10, data))
+
+if args.debug:
+    text_input_list = text_input_list[:1000]
+    logging.debug('text_input_list: %s', text_input_list[:2])
+
+    
 
 
 if os.path.exists(args.hidden_states_filename):
