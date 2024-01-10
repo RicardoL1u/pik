@@ -12,6 +12,7 @@ import wandb
 from pik.utils import wandb_log
 from try_to_plot import plot_calibration, plot_and_save_scatter
 import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # Function Definitions
 
 def parse_arguments():
@@ -30,6 +31,7 @@ def parse_arguments():
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
     parser.add_argument('--output_dir', required=True, help='output directory')
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
+    parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     return parser.parse_args()
 
 class Trainer:
@@ -86,6 +88,14 @@ class Trainer:
         val_metrics = []
         test_metrics = []
         
+        wandb_log(logging.INFO, self.use_wandb, "===== Start Training =====")
+        # log the number of epochs
+        wandb_log(logging.INFO, self.use_wandb, "There are {} epochs".format(self.args.num_epochs))
+        # log the number of steps
+        wandb_log(logging.INFO, self.use_wandb, "There are {} steps".\
+                  format(len(self.train_loader) * self.args.num_epochs))
+        
+        step_now = 0
         self.model.train()
         for epoch in tqdm(range(self.args.num_epochs)):
             running_loss = 0.0
@@ -98,7 +108,13 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
-            train_losses.append(running_loss / len(self.train_loader))
+                step_now += 1
+                if step_now % self.args.logging_steps == 0:
+                    wandb_log(logging.INFO, self.use_wandb, 
+                              score_dict={"train_loss": running_loss / self.args.logging_steps},
+                              step=step_now)
+                    running_loss = 0.0
+            # train_losses.append(running_loss / len(self.train_loader))
             
             # validate model
             all_preds, all_labels = self.prediction()
@@ -106,14 +122,15 @@ class Trainer:
             train_metrics.append(train_brier)
             val_metrics.append(val_brier)
             test_metrics.append(test_brier)
-            wandb_log(logging.INFO, self.use_wandb, score_dict={"epoch": epoch, "train_loss": running_loss / len(self.train_loader),
-                       "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier})
+            wandb_log(logging.INFO, self.use_wandb, score_dict={"epoch": epoch,
+                       "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier},
+                      step=step_now)
         all_preds, all_labels = self.prediction()
         self.plot_scatters_to_wandb(all_preds, all_labels)
         # Close wandb run
         if self.use_wandb:
             wandb.finish()   
-        return train_losses, train_metrics, val_metrics, test_metrics
+        return train_metrics, val_metrics, test_metrics
 
     def prediction(self):
         all_hs = self.dataset.hidden_states
@@ -222,7 +239,7 @@ if __name__ == "__main__":
     
     trainer = Trainer(args)
 
-    train_losses, train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
+    train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
 
     # train_loader, val_loader, test_loader, dataset = load_and_split_dataset(args)
 
