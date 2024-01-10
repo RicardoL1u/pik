@@ -1,6 +1,6 @@
 # Description: Script to train the model
 export CUDA_VISIBLE_DEVICES=6
-model="llama-65b-hf"
+model="llama-7b-hf"
 num_epochs=100
 batch_size=7680
 learning_rate=1e-5
