@@ -38,6 +38,7 @@ class Model:
             temperature=generation_options.get('temperature', 1),
             top_k=generation_options.get('top_k', 50),
             top_p=generation_options.get('top_p', 1),
+            stop=['Question']
             # pad_token_id=generation_options.get('pad_token_id', 50256),
             # eos_token_id=generation_options.get('eos_token_id', 198),
         )
