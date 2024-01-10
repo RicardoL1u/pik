@@ -50,13 +50,13 @@ args.text_generations_filename = os.path.join(args.data_folder, args.text_genera
 args.qa_pairs_filename = os.path.join(args.data_folder, args.qa_pairs_filename)
 
 generation_options = {
-	'max_new_tokens': args.max_new_tokens,
-	'temperature': args.temperature,
-	'do_sample': True,
-	'pad_token_id': args.pad_token_id,
-	'n': args.n_answers_per_question,
-	# 'eos_token_id': 198,	# Stop generating more tokens when the model generates '\n'
-	# 'eos_token_id': 13,	# Stop generating more tokens when the model generates '.'
+    'max_new_tokens': args.max_new_tokens,
+    'temperature': args.temperature,
+    'do_sample': True,
+    'pad_token_id': args.pad_token_id,
+    'n': args.n_answers_per_question,
+    # 'eos_token_id': 198,	# Stop generating more tokens when the model generates '\n'
+    # 'eos_token_id': 13,	# Stop generating more tokens when the model generates '.'
 }
 
 # Load dataset and model
@@ -70,8 +70,7 @@ data = TriviaQADataset()
 # data_ids = data_ids.cpu().numpy().tolist()
 model = Model(args.model_checkpoint, precision=args.precision,generation_options=generation_options)
 
-### Start generating
-results = pd.DataFrame()
+
 start = time()
 all_hidden_states = None
 # torch.manual_seed(args.generation_seed)
@@ -122,17 +121,31 @@ if model.mode == 'lazy':
 # use batch generation
 output_text_list = model.get_batch_text_generation(text_input_list)
 
-for idx, model_answers in tqdm(enumerate(output_text_list),desc='Generating text'):
-	# model_answers = model.get_text_generation(text_input)
-	for n, model_answer in enumerate(model_answers):
-		eval = evaluate_answer(model_answer, answer)
-		# Record results in memory
-		df_idx = results.shape[0]
-		results.loc[df_idx, 'hid'] = idx
-		results.loc[df_idx, 'qid'] = idx
-		results.loc[df_idx, 'n'] = n
-		results.loc[df_idx, 'model_answer'] = model_answer
-		results.loc[df_idx, 'evaluation'] = eval
+if args.debug:
+    with open(f'{args.data_folder}/output_text_list.json', 'w') as f:
+        json.dump(output_text_list, f, indent=4, ensure_ascii=False)
+
+### Start generating
+results = [] 
+for idx, model_answers in tqdm(enumerate(output_text_list),
+                               desc='Evaluate Answers',
+                               total=len(output_text_list)):
+    # model_answers = model.get_text_generation(text_input)
+    qusetion, answer = data[idx]
+    for n, model_answer in enumerate(model_answers):
+        eval = evaluate_answer(model_answer, answer)
+        # Record results in memory
+        results.append({
+            'hid': idx, # hid is same as qid
+            'qid': idx,
+            'n': n,
+            'question': qusetion,
+            'answer': answer,
+            'model_answer': model_answer,
+            'evaluation': eval
+        })
+# convert to dataframe
+results = pd.DataFrame(results)
 
 
 # progress_bar = trange(args.n_questions) if not args.estimate else trange(args.n_test)
@@ -166,9 +179,9 @@ for idx, model_answers in tqdm(enumerate(output_text_list),desc='Generating text
 # 			if col != 'model_answer':
 # 				results[col] = results[col].astype(int)
 # 		results.to_csv(args.text_generations_filename, index=False)
-# 		print('-------------')
-# 		print(results)
-# 		print(args.text_generations_filename)
+# 		logging.info('-------------')
+# 		logging.info(results)
+# 		logging.info(args.text_generations_filename)
 
 # Estimate time to completion and disk usage if `--estimate` is set, then exit
 # if args.estimate:
@@ -177,7 +190,7 @@ for idx, model_answers in tqdm(enumerate(output_text_list),desc='Generating text
 # 	for dim in all_hidden_states.shape[1:]:
 # 		num_floats *= dim
 # 	bytes_per_float = 2 if args.precision == torch.float16 else 4
-# 	print(f'''n={args.n_test} questions
+# 	logging.info(f'''n={args.n_test} questions
 # 	{args.n_answers_per_question} generations per question
 # 	{generation_options['max_new_tokens']} new tokens per generation
 # 	-------------------------------------
@@ -186,29 +199,30 @@ for idx, model_answers in tqdm(enumerate(output_text_list),desc='Generating text
 
 # 	Estimated duration (give or take) to process all {args.n_questions} questions:
 # 	{(time_taken / args.n_test) * args.n_questions / 3600 :.3f} hours
-	
+    
 # 	Estimated disk usage for {args.hidden_states_filename}:
 # 	{(num_floats * bytes_per_float) / 1e6:.3f} MB''')
 # 	exit()
 
 # Generate q-a pairs df
-qa_pairs = pd.DataFrame()
+qa_pairs = []
 for idx in range(len(data)):
-	q, a = data[idx]
-	df_idx = qa_pairs.shape[0]
-	qa_pairs.loc[df_idx, 'qid'] = idx
-	qa_pairs.loc[df_idx, 'question'] = q
-	qa_pairs.loc[df_idx, 'answer'] = a
-qa_pairs['qid'] = qa_pairs['qid'].astype(int)
-display(qa_pairs.head())
+    q, a = data[idx]
+    qa_pairs.append({
+        'qid': idx,
+        'question': q,
+        'answer': a
+    })
+qa_pairs = pd.DataFrame(qa_pairs)
+
 
 # Generate results df
 for col in results.columns:
-	if col != 'model_answer':
-		results[col] = results[col].astype(int)
+    if col != 'model_answer':
+        results[col] = results[col].astype(int)
 display(results.head())
-print('Mean evaluation score:', results.evaluation.mean())
-print('Hidden states shape:', hidden_states_host.shape)
+logging.info('Mean evaluation score:', results.evaluation.mean())
+logging.info('Hidden states shape:', hidden_states_host.shape)
 
 # Write final results to disk
 # torch.save(hidden_states_host, args.hidden_states_filename)
