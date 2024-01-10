@@ -8,7 +8,8 @@ def plot_calibration(x_list, y_list, num_bins=10, file_name='calibration_plot.pn
 
     # Group into bins
     total_num = len(xy_tuples)
-    xy_grouped = [xy_tuples[int(i * total_num / num_bins): int((i + 1) * total_num / num_bins)] for i in range(num_bins)]
+    xy_grouped = [xy_tuples[int(i * total_num / num_bins): int((i + 1) * total_num / num_bins)] 
+                  for i in range(num_bins)]
 
     # Calculate mean for each bin
     x_means = [sum([x[0] for x in group]) / len(group) for group in xy_grouped]
