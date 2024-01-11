@@ -2,6 +2,7 @@ import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from transformers import get_linear_schedule_with_warmup
 import torch
 from torch.utils.data import DataLoader, Subset
 from pik.datasets.hidden_states_dataset import HiddenStatesDataset
@@ -30,6 +31,7 @@ def parse_arguments():
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
     parser.add_argument('--output_dir', required=True, help='output directory')
+    parser.add_argument('--warmup_ratio', type=float, default=0.1, help='warmup ratio')
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     return parser.parse_args()
@@ -82,6 +84,7 @@ class Trainer:
             wandb.init(project="pik", name=args.wandb_run_name)
         
     def trainning_loop(self):
+        
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.learning_rate)
         loss_fn = torch.nn.BCELoss()
         train_losses = []
@@ -94,8 +97,19 @@ class Trainer:
         # log the number of epochs
         wandb_log(logging.INFO, self.use_wandb, "There are {} epochs".format(self.args.num_epochs))
         # log the number of steps
+        # Total number of training steps
+        total_steps = len(self.train_loader) * self.args.num_epochs
         wandb_log(logging.INFO, self.use_wandb, "There are {} steps".\
-                  format(len(self.train_loader) * self.args.num_epochs))
+                  format(total_steps))
+        
+        scheduler = None
+        if self.args.warmup_ratio > 0 and self.args.warmup_ratio < 1:
+            # Calculate warmup steps as a fraction of total steps
+            num_warmup_steps = int(total_steps * self.args.warmup_ratio)
+            # Initialize the learning rate scheduler
+            scheduler = get_linear_schedule_with_warmup(optimizer, 
+                                                    num_warmup_steps=num_warmup_steps, 
+                                                    num_training_steps=total_steps)
         
         step_now = 0
         running_loss = 0.0
@@ -111,9 +125,12 @@ class Trainer:
                 optimizer.step()
                 running_loss += loss.item()
                 step_now += 1
+                if scheduler is not None:
+                    scheduler.step()
                 if step_now % self.args.logging_steps == 0:
                     wandb_log(logging.INFO, self.use_wandb, 
                               score_dict={"train_loss": running_loss / self.args.logging_steps,
+                                          "learning_rate": scheduler.get_last_lr()[0],
                                           "step": step_now},
                               step=step_now)
                     running_loss = 0.0
