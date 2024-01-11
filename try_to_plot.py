@@ -31,6 +31,18 @@ def plot_calibration(x_list, y_list, num_bins=10, file_name='calibration_plot.pn
     # Save the plot
     plt.savefig(file_name)
 
+def plot_training_loss(loss_list, logging_steps, file_name):
+    # Plotting
+    plt.figure(figsize=(10, 10))
+    plt.plot([i * logging_steps for i in range(len(loss_list))], loss_list, c='red', label='line')
+    plt.xlabel('Training Steps')
+    plt.ylabel('Training Loss')
+    plt.title('Training Loss')
+    plt.legend()
+    
+    # Save the plot
+    plt.savefig(file_name)
+
 
 def plot_and_save_scatter(df, output_dir):
     """
