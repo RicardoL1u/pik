@@ -11,7 +11,7 @@ from tqdm import tqdm
 import os
 import wandb
 from pik.utils import wandb_log
-from try_to_plot import plot_calibration, plot_and_save_scatter
+from try_to_plot import plot_calibration, plot_and_save_scatter, plot_training_loss
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # Function Definitions
@@ -116,7 +116,14 @@ class Trainer:
                 labels = labels.unsqueeze(1).type(self.args.precision).to(self.args.device)
                 optimizer.zero_grad()
                 outputs = self.model(hs)
+                
                 loss = loss_fn(outputs, labels)
+                # Calculate L2 Regularization
+                l2_reg = torch.tensor(0.).to(self.args.device)
+                for param in self.model.parameters():
+                    l2_reg += torch.norm(param)**2
+                loss += 0.01 * l2_reg
+                
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
@@ -142,7 +149,7 @@ class Trainer:
                        "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier},
                       step=step_now)
         all_preds, all_labels = self.prediction()
-        self.plot_scatters_to_wandb(all_preds, all_labels)
+        self.plot_scatters_to_wandb(all_preds, all_labels, train_losses)
         # Close wandb run
         if self.use_wandb:
             wandb.finish()   
@@ -166,7 +173,7 @@ class Trainer:
         test_brier = np.mean((labels[self.test_hids] - preds[self.test_hids]) ** 2)
         return train_brier, val_brier, test_brier
     
-    def plot_scatters_to_wandb(self, preds, labels):
+    def plot_scatters_to_wandb(self, preds, labels, train_losses):
         # plot scatter
         df = pd.DataFrame({'evaluation': labels, 'prediction': preds})
         df['split'] = 'test'
@@ -194,8 +201,11 @@ class Trainer:
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
         test_evals = df[df['split'] == 'test']['evaluation'].tolist()
         
-        plot_calibration(test_evals, test_preds, file_name=os.path.join(self.args.output_dir, 'calibration.png'))
+        plot_calibration(test_evals, test_preds, 
+                         file_name=os.path.join(self.args.output_dir, 'calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
+        plot_training_loss(train_losses, self.args.logging_steps, 
+                           file_name=os.path.join(self.args.output_dir, 'training_loss.png'))
     # def validate_model(model, val_loader, args):
     #     loss_fn = torch.nn.BCELoss()
     #     val_losses = []
