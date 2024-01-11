@@ -40,8 +40,6 @@ parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help
 parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
 parser.add_argument('--qa_pairs_filename', default='qa_pairs.csv', help='filename for saving q-a pairs')
 parser.add_argument('--debug', action='store_true', default=False, help='set to True to enable debug mode')
-# parser.add_argument('--estimate', action='store_true', default=False, help='set to True to estimate time to completion')
-# parser.add_argument('--n_test', type=int, default=3, help='number of questions to use for estimating time to completion')
 args = parser.parse_args()
 args.precision = torch.float16 if args.precision == 'float16' else torch.float32
 torch.set_default_dtype(args.precision)
@@ -55,25 +53,18 @@ generation_options = {
     'do_sample': True,
     'pad_token_id': args.pad_token_id,
     'n': args.n_answers_per_question,
-    # 'eos_token_id': 198,	# Stop generating more tokens when the model generates '\n'
-    # 'eos_token_id': 13,	# Stop generating more tokens when the model generates '.'
 }
 
-# Load dataset and model
-data = TriviaQADataset()
-# torch.manual_seed(args.dataset_seed)
-# data_ids = torch.randperm(len(data))
-# if args.n_questions == 0:
-#     args.n_questions = len(data_ids)
-# if args.n_questions > 0:
-# 	data_ids = data_ids[:args.n_questions]
-# data_ids = data_ids.cpu().numpy().tolist()
+
+data = pd.read_csv('data/trivia_qa/val_qa_pairs.csv')
+# convert data to list of tuple (question, answer)
+data = [(q, a) for q, a in zip(data.question, data.answer)]
+
 model = Model(args.model_checkpoint, precision=args.precision,generation_options=generation_options)
 
 
 start = time()
 all_hidden_states = None
-# torch.manual_seed(args.generation_seed)
 
 text_input_list = []
 for question, _ in data:
@@ -82,9 +73,6 @@ for question, _ in data:
 if args.debug:
     text_input_list = text_input_list[:1000]
     logging.debug('text_input_list: %s', text_input_list[:2])
-
-    
-
 
 if os.path.exists(args.hidden_states_filename):
     hidden_states_host = torch.load(args.hidden_states_filename)
@@ -148,61 +136,6 @@ for idx, model_answers in tqdm(enumerate(output_text_list),
 results = pd.DataFrame(results)
 
 
-# progress_bar = trange(args.n_questions) if not args.estimate else trange(args.n_test)
-# for i in progress_bar:
-# 	# Prep inputs
-# 	hid, qid = i, data_ids[i]
-# 	question, answer = data[qid]
-# 	progress_bar.set_description(question)
-# 	text_input = prompt_eng(question, 10, data)
-# 	# Get hidden state
-# 	hidden_state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
-# 	if hid == 0:
-# 		all_hidden_states = hidden_state.unsqueeze(0)
-# 	else:
-# 		all_hidden_states = torch.cat((all_hidden_states, hidden_state.unsqueeze(0)), dim=0)
-# 	# Generate multiple model answers
-# 	model_answers = model.get_text_generation(text_input)
-# 	for n, model_answer in enumerate(model_answers):
-# 		eval = evaluate_answer(model_answer, answer)
-# 		# Record results in memory
-# 		df_idx = results.shape[0]
-# 		results.loc[df_idx, 'hid'] = hid
-# 		results.loc[df_idx, 'qid'] = qid
-# 		results.loc[df_idx, 'n'] = n
-# 		results.loc[df_idx, 'model_answer'] = model_answer
-# 		results.loc[df_idx, 'evaluation'] = eval
-# 	# Periodically write results to disk
-# 	if not args.estimate and (hid + 1) % args.save_frequency == 0 and (hid + 1) != args.save_frequency:
-# 		torch.save(all_hidden_states, args.hidden_states_filename)
-# 		for col in results.columns:
-# 			if col != 'model_answer':
-# 				results[col] = results[col].astype(int)
-# 		results.to_csv(args.text_generations_filename, index=False)
-# 		logging.info('-------------')
-# 		logging.info(results)
-# 		logging.info(args.text_generations_filename)
-
-# Estimate time to completion and disk usage if `--estimate` is set, then exit
-# if args.estimate:
-# 	time_taken = time() - start
-# 	num_floats = args.n_questions
-# 	for dim in all_hidden_states.shape[1:]:
-# 		num_floats *= dim
-# 	bytes_per_float = 2 if args.precision == torch.float16 else 4
-# 	logging.info(f'''n={args.n_test} questions
-# 	{args.n_answers_per_question} generations per question
-# 	{generation_options['max_new_tokens']} new tokens per generation
-# 	-------------------------------------
-# 	Average processing time per question:
-# 	{time_taken / args.n_questions :.2f} seconds
-
-# 	Estimated duration (give or take) to process all {args.n_questions} questions:
-# 	{(time_taken / args.n_test) * args.n_questions / 3600 :.3f} hours
-    
-# 	Estimated disk usage for {args.hidden_states_filename}:
-# 	{(num_floats * bytes_per_float) / 1e6:.3f} MB''')
-# 	exit()
 
 # Generate q-a pairs df
 qa_pairs = []
