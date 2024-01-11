@@ -2,11 +2,12 @@
 import re
 import string
 import torch
-
+import json
 # Prompt engineering
 PREAMBLE = ''
-XSHOT_TEMPLATE = 'Question: {question}\nAnswer:{answer}'
+XSHOT_TEMPLATE = 'Question: {question}\nAnswer: {answer}'
 POSTAMBLE = 'Question: {question}\nAnswer: '
+EAXMPLES = json.load(open('data/trivia_qa/example_qa_pairs.json', 'r'))
 import wandb
 import logging
 
@@ -34,10 +35,9 @@ def build_few_shot(dataset, n=0):
     if dataset is None:
         raise ValueError('No dataset to build few-shot prompt from.')
     prompt = ''
-    indices = torch.randperm(len(dataset))[:n].cpu().numpy().tolist()
     example_list = []
     for i in range(n):
-        question, answer = dataset[indices[i]]
+        question, answer = EAXMPLES[i]
         example_list.append(XSHOT_TEMPLATE.format(question=question, answer=answer))
         # prompt += XSHOT_TEMPLATE.format(question=question, answer=answer)
     prompt = '\n'.join(example_list)
