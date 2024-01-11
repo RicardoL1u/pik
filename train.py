@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from transformers import get_linear_schedule_with_warmup
+from transformers import get_scheduler
 import torch
 from torch.utils.data import DataLoader, Subset
 from pik.datasets.hidden_states_dataset import HiddenStatesDataset
@@ -102,14 +102,12 @@ class Trainer:
         wandb_log(logging.INFO, self.use_wandb, "There are {} steps".\
                   format(total_steps))
         
-        scheduler = None
-        if self.args.warmup_ratio > 0 and self.args.warmup_ratio < 1:
-            # Calculate warmup steps as a fraction of total steps
-            num_warmup_steps = int(total_steps * self.args.warmup_ratio)
-            # Initialize the learning rate scheduler
-            scheduler = get_linear_schedule_with_warmup(optimizer, 
-                                                    num_warmup_steps=num_warmup_steps, 
-                                                    num_training_steps=total_steps)
+        # Initialize the learning rate scheduler
+        scheduler = get_scheduler(
+                                'constant' if self.args.warmup_ratio > 1 else 'linear',
+                                optimizer=optimizer, 
+                                num_warmup_steps=int(total_steps * self.args.warmup_ratio), 
+                                num_training_steps=total_steps)
         
         step_now = 0
         running_loss = 0.0
@@ -125,8 +123,7 @@ class Trainer:
                 optimizer.step()
                 running_loss += loss.item()
                 step_now += 1
-                if scheduler is not None:
-                    scheduler.step()
+                scheduler.step()
                 if step_now % self.args.logging_steps == 0:
                     wandb_log(logging.INFO, self.use_wandb, 
                               score_dict={"train_loss": running_loss / self.args.logging_steps,
