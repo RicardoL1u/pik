@@ -27,21 +27,25 @@ def setup_model(args):
     }
     return Model(args.model_checkpoint, generation_options=generation_options)
 
-def get_hidden_states(model:Model, text_inputs:List[str], args):
-    hidden_states = None
+# def get_hidden_states(model:Model, text_inputs:List[str], args):
+#     hidden_states = None
     
-    for text_input in tqdm(text_inputs, desc='Generating hidden states'):
-        state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
+#     for text_input in tqdm(text_inputs, desc='Generating hidden states'):
+#         state = model.get_hidden_states(text_input, keep_all=args.keep_all_hidden_layers)
         
-        # periodically move hidden states to cpu
-        if hidden_states is None:
-            hidden_states = state.unsqueeze(0).cpu()
-        else:
-            hidden_states = torch.cat((hidden_states, state.unsqueeze(0).cpu()), dim=0)
+#         # periodically move hidden states to cpu
+#         if hidden_states is None:
+#             hidden_states = state.unsqueeze(0).cpu()
+#         else:
+#             hidden_states = torch.cat((hidden_states, state.unsqueeze(0).cpu()), dim=0)
     
-    # release memory
-    model.model = None
-    return hidden_states
+#     # release memory
+#     model.model = None
+#     return hidden_states
+
+def get_hidden_states(model:Model, text_inputs, args):
+    return model.get_batch_hidden_states(text_inputs,
+                                         keep_all=args.keep_all_hidden_layers)
 
 def generate_answers(model:Model, text_inputs:List[str]):
     return model.get_batch_text_generation(text_inputs)

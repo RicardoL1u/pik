@@ -4,6 +4,7 @@ from pik.utils import normalize_answer
 from vllm import LLM, SamplingParams
 import re
 from typing import List
+from tqdm import tqdm
 import logging
 def is_large_model(model_checkpoint):
     model_checkpoint = model_checkpoint.lower()
@@ -20,12 +21,17 @@ def load_model(model_checkpoint, is_vllm=False):
             logging.debug(f'Loading Model with tensor parallelism: {torch.cuda.device_count()} GPUs')
             return  LLM(model=model_checkpoint, tensor_parallel_size=torch.cuda.device_count())
         else:
-            return AutoModelForCausalLM.from_pretrained(model_checkpoint, device_map='auto')
+            return AutoModelForCausalLM.from_pretrained(model_checkpoint, 
+                                                        device_map='auto',
+                                                        attn_implementation="flash_attention_2",
+                                                        torch_dtype=torch.float16)
     else:
         if is_vllm:
             return LLM(model=model_checkpoint)
         else:
-            return AutoModelForCausalLM.from_pretrained(model_checkpoint).to('cuda')
+            return AutoModelForCausalLM.from_pretrained(model_checkpoint,
+                                                        attn_implementation="flash_attention_2",
+                                                        torch_dtype=torch.float16).to('cuda')
 
 class Model:
     '''
@@ -44,13 +50,56 @@ class Model:
             # eos_token_id=generation_options.get('eos_token_id', 198),
         )
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_checkpoint,
+                                                       padding_side='left')
+        # set padding token id
+        if self.tokenizer.pad_token_id is None:
+            self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
         # Load model when needed
         self.model_checkpoint = model_checkpoint
         self.model = None
         self.vllm_model = None
 
+    def get_batch_hidden_states(self, texts, batch_size=32, keep_all=True):
+        # Method to process texts in batches
+        if self.model is None:
+            self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
+
+        hidden_states_list = []
+        # for i in range(0, len(texts), batch_size):
+        for i in tqdm(range(0, len(texts), batch_size), 
+                      desc='Generating hidden states',
+                      total=len(texts)//batch_size,
+                      ncols=100):
+            batch_texts = texts[i:i+batch_size]
+            encoded_input = self.tokenizer(batch_texts, 
+                                           padding=True, 
+                                           return_tensors='pt',
+                                           ).to(self.model.device)
+
+            with torch.no_grad():  # Reduces memory usage
+                output = self.model(**encoded_input, output_hidden_states=True)
+
+            logging.debug(f'layers: {len(output.hidden_states)}')
+            logging.debug(f'shape of output.hidden_states: {output.hidden_states[-1].shape}')
+            
+            if not keep_all:
+                # Keep only last layer of last token
+                batch_states = output.hidden_states[-1][:, -1]
+            else:
+                # Stack all layers of last token
+                # torch.stack(output.hidden_states, dim=1) (bsz, n_layers, seq_len, hidden_size)
+                # batch_states (bsz, n_layers, hidden_size)
+                batch_states = torch.stack(output.hidden_states, dim=1)[:, :, -1, :].squeeze()
+            
+            logging.debug(f'shape of batch_states: {batch_states.shape}')
+            
+            hidden_states_list.append(batch_states.cpu())
+        # release memory
+        self.model = None
+        return torch.cat(hidden_states_list, dim=0)
+    
     def get_hidden_states(self, text_input, keep_all=True):
         # lazy load model
         if self.model is None:
