@@ -3,19 +3,21 @@
 Generate and save hidden states dataset.
 '''
 import argparse
-import pandas as pd
+# import pandas as pd
 import torch
 from tqdm import tqdm
 from pik.models.model import Model
+from datasets import load_dataset
 from pik.utils import prompt_eng, evaluate_answer
 from typing import List
 import logging
 import os
+import json
 
 # Function Definitions
-def load_data(file_path):
-    data = pd.read_csv(file_path)
-    return [(q, a) for q, a in zip(data.question, data.answer)]
+# def load_data(file_path):
+#     data = pd.read_csv(file_path)
+#     return [(q, a) for q, a in zip(data.question, data.answer)]
 
 def setup_model(args):
     generation_options = {
@@ -55,7 +57,7 @@ def evaluate_model_answers(dataset, output_text_list):
     for idx, model_answers in tqdm(enumerate(output_text_list), 
                                    desc='Evaluating Answers', 
                                    total=len(output_text_list)):
-        question, correct_answer = dataset[idx]
+        question, correct_answer = dataset[idx]['question'], dataset[idx]['answer']
         for n, model_answer in enumerate(model_answers):
             evaluation = evaluate_answer(model_answer, correct_answer)
             results.append({
@@ -67,7 +69,7 @@ def evaluate_model_answers(dataset, output_text_list):
                 'model_answer': model_answer,
                 'evaluation': evaluation,
             })
-    return pd.DataFrame(results)
+    return results
 
 # Argument Parsing
 def parse_arguments():
@@ -102,7 +104,7 @@ if __name__ == "__main__":
     )
     # Load data
     try:
-        dataset = load_data('data/trivia_qa/val_qa_pairs.csv')
+        dataset = load_dataset('data/trivia_qa', 'rc', split='validation')
     except FileNotFoundError as e:
         logging.error(f"Data file not found: {e}")
         exit(1)
@@ -111,13 +113,13 @@ if __name__ == "__main__":
     model = setup_model(args)
 
     # Generate hidden states
-    text_inputs = [prompt_eng(q, 10, dataset) for q, _ in dataset]
+    text_inputs = [prompt_eng(data['question'], 10) for data in dataset]
     # Optionally limit number of questions
     if args.n_questions > 0:
         text_inputs = text_inputs[:args.n_questions]
     
     if args.debug:
-        text_inputs = text_inputs[:100]
+        text_inputs = text_inputs[:5]
         logging.debug('One Example of text_inputs:\n=======\n%s\n======', text_inputs[0])
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
         args.text_generations_filename = args.text_generations_filename.replace('.csv', '_debug.csv')
@@ -135,8 +137,8 @@ if __name__ == "__main__":
         output_text_list = generate_answers(model, text_inputs)
         # Save results
         logging.info(f'Saved text generations to {args.text_generations_filename}')
-        results = evaluate_model_answers(dataset, output_text_list)
-        results.to_csv(args.text_generations_filename, index=False)
-        
+        results:dict = evaluate_model_answers(dataset, output_text_list)
+        with open(args.text_generations_filename, 'w') as f:
+            json.dump(results, f, indent=4, ensure_ascii=False)
     
     

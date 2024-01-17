@@ -75,6 +75,8 @@ def evaluate_answer(model_answer, dataset_answer, exact_match=False):
     Returns 1 (correct) if `dataset_answer` is (a substring of) `model_answer`
     Returns 0 (incorrect) otherwise
     '''
+    # use alias in dataset_answer
+    all_possible_answer = dataset_answer['normalized_aliases'] + [dataset_answer['normalized_value']]
     if exact_match:
-        return int(normalize_answer(model_answer) == normalize_answer(dataset_answer))
-    return int(dataset_answer in normalize_answer(model_answer))
+        return any([model_answer == normalize_answer(ans) for ans in all_possible_answer])
+    return any([normalize_answer(model_answer) in normalize_answer(ans) for ans in all_possible_answer])
