@@ -61,7 +61,7 @@ class Model:
         self.model = None
         self.vllm_model = None
 
-    def get_batch_hidden_states(self, texts, batch_size=32, keep_all=True):
+    def get_batch_hidden_states(self, texts, batch_size=16, keep_all=True):
         # Method to process texts in batches
         if self.model is None:
             self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
@@ -96,6 +96,8 @@ class Model:
             logging.debug(f'shape of batch_states: {batch_states.shape}')
             
             hidden_states_list.append(batch_states.cpu())
+            # release memory
+            batch_states = None
         # release memory
         self.model = None
         return torch.cat(hidden_states_list, dim=0)
