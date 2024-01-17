@@ -24,31 +24,29 @@ def wandb_log(logging_level, use_wandb=False, log_msg=None,
             wandb.log(score_dict, step=step)
 
  
-def build_few_shot(dataset, n=0):
+def build_few_shot(example_num=0):
     '''
     Designed to following the prompting format seen section A.7 of the paper
     'Language Models (Mostly) Know What They Know'
     https://arxiv.org/pdf/2207.05221.pdf
     '''
-    if n == 0:
+    if example_num == 0:
         return ''
-    if dataset is None:
-        raise ValueError('No dataset to build few-shot prompt from.')
     prompt = ''
     example_list = []
-    for i in range(n):
+    for i in range(example_num):
         question, answer = EAXMPLES[i]
         example_list.append(XSHOT_TEMPLATE.format(question=question, answer=answer))
         # prompt += XSHOT_TEMPLATE.format(question=question, answer=answer)
     prompt = '\n'.join(example_list)
     return prompt
 
-def prompt_eng(question, n=0, dataset=None):
+def prompt_eng(question, example_num=0):
     '''
     Returns an x-shot prompt for the given question.
     If `n` is higher than 0, `dataset` must be provided.
     '''
-    return PREAMBLE + build_few_shot(dataset, n) + '\n' + POSTAMBLE.format(question=question)
+    return PREAMBLE + build_few_shot(example_num) + '\n' + POSTAMBLE.format(question=question)
 
 def normalize_answer(s):
     '''
