@@ -32,6 +32,8 @@ def parse_arguments():
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     parser.add_argument('--logging_level', default='INFO', help='logging level')
+    parser.add_argument('--model_layer_idx', default=None, 
+                        help='model layer index, which layer to use, None means all layers')
     return parser.parse_args()
 
 class Trainer:
@@ -46,7 +48,7 @@ class Trainer:
             hs_file=args.hidden_states_filename,
             tg_file=args.text_generations_filename,
             precision=args.precision,
-            last_layer_only=False,
+            layer_idx=args.model_layer_idx,
             device=args.device)
         
         self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)

@@ -13,19 +13,21 @@ class DirectHiddenStatesDataset(Dataset):
         hs_file='hidden_states.pt',
         tg_file='text_generations.csv',
         precision=torch.float16,
-        last_layer_only=False,
+        layer_idx=None, # None means all layers
         device='cuda',
     ):
+        all_layers = layer_idx is None 
+        
         hs = torch.load(hs_file, map_location=device).type(precision)
         assert hs.dim() in (2, 3)
-        if not last_layer_only and hs.dim() == 3:
+        if all_layers and hs.dim() == 3:
             # HACK: to keep the fisrt half layers
             # hs = hs[:, :hs.shape[1] // 2, :]
             # HACK: to keep the middle half layers
             # hs = hs[:, hs.shape[1] // 4:hs.shape[1] // 4 * 3, :]
             hs = hs.reshape(hs.shape[0], hs.shape[1] * hs.shape[2])
-        elif last_layer_only and hs.dim() == 3:
-            hs = hs[:, -1, :]
+        elif not all_layers and hs.dim() == 3:
+            hs = hs[:, layer_idx, :]
             # HACK: to use the second last layer, we take the last layer of the reversed tensor
             # hs = hs[:, -2, :]
         self.hidden_states = hs
