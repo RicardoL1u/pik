@@ -52,6 +52,9 @@ class Trainer:
             device=args.device)
         
         self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
+        # use xavier initialization
+        torch.nn.init.xavier_uniform_(self.model.ln.weight)
+        
         
         wandb_log(logging.INFO, self.use_wandb,
                   f"The shape of hidden states is {self.dataset.hidden_states.shape}")
