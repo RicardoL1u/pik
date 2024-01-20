@@ -195,7 +195,10 @@ class Trainer:
         df['split'] = 'test'
         df.loc[self.train_hids, 'split'] = 'train'
         df.loc[self.val_hids, 'split'] = 'val'
-    
+
+        train_brier, val_brier, test_brier = self.calculate_metrics(preds, labels)
+        logging.info("The train brier is {}, the val brier is {}, the test brier is {}".\
+                        format(train_brier, val_brier, test_brier))
         
         # save the dataframe to local
         df.to_csv(os.path.join(self.args.output_dir, 'scatters.csv'), index=False)
@@ -230,7 +233,22 @@ if __name__ == "__main__":
 
     # Set logging level
     logging.getLogger().setLevel(args.logging_level)
+    logging.info(f'Logging level set to {args.logging_level}')
+    
+    # logging all the args
+    logging.info("===== Args =====")
+    for arg in vars(args):
+        logging.info("{}: {}".format(arg, getattr(args, arg)))
+    
+    fh = logging.FileHandler(os.path.join(args.output_dir, 'train_direct.log'))
+    fh.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
 
+    # Add the file handler to the root logger
+    logging.getLogger('').addHandler(fh)
+    
     # Ensure data files exist
     assert os.path.exists(args.hidden_states_filename)
     assert os.path.exists(args.text_generations_filename)
