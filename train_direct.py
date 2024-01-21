@@ -16,6 +16,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 # Function Definitions
 
 def parse_arguments():
+    def parse_layers(arg):
+        if arg.lower() == 'none':
+            return None
+        try:
+            return [int(layer.strip()) for layer in arg.split(',')]
+        except ValueError:
+            raise argparse.ArgumentTypeError("Value must be 'None' or a comma-separated list of integers")
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_frac', type=float, default=0.8, help='fraction of hidden states to use for training')
     parser.add_argument('--num_epochs', type=int, default=100, help='number of epochs to train for')
@@ -32,9 +39,30 @@ def parse_arguments():
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     parser.add_argument('--logging_level', default='INFO', help='logging level')
-    parser.add_argument('--model_layer_idx', default=None, 
-                        help='model layer index, which layer to use, None means all layers')
-    return parser.parse_args()
+    parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
+                    help='Model layer index(es), which layer(s) to use. None for all layers, \
+                    or specify indices separated by commas (e.g., 0,2,4).')
+    args = parser.parse_args()
+    # Set logging level
+    logging.getLogger().setLevel(args.logging_level)
+    logging.info(f'Logging level set to {args.logging_level}')
+    
+    fh = logging.FileHandler(os.path.join(args.output_dir, 'train_direct.log'))
+    fh.setLevel(logging.DEBUG)
+    
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    
+    # logging all the args
+    logging.info("===== Args =====")
+    for arg in vars(args):
+        logging.info("{}: {}".format(arg, getattr(args, arg)))
+    
+
+    # Add the file handler to the root logger
+    logging.getLogger('').addHandler(fh)
+    
+    return args
 
 class Trainer:
     def __init__(self, args):
@@ -230,24 +258,6 @@ class Trainer:
 
 if __name__ == "__main__":
     args = parse_arguments()
-
-    # Set logging level
-    logging.getLogger().setLevel(args.logging_level)
-    logging.info(f'Logging level set to {args.logging_level}')
-    
-    # logging all the args
-    logging.info("===== Args =====")
-    for arg in vars(args):
-        logging.info("{}: {}".format(arg, getattr(args, arg)))
-    
-    fh = logging.FileHandler(os.path.join(args.output_dir, 'train_direct.log'))
-    fh.setLevel(logging.DEBUG)
-    
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-
-    # Add the file handler to the root logger
-    logging.getLogger('').addHandler(fh)
     
     # Ensure data files exist
     assert os.path.exists(args.hidden_states_filename)
