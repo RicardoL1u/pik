@@ -2,6 +2,7 @@ import torch
 from transformers import  AutoTokenizer, AutoModelForCausalLM
 from pik.utils import normalize_answer
 from vllm import LLM, SamplingParams
+from .hook_tool import HookMLPActivation
 import re
 from typing import List
 from tqdm import tqdm
@@ -61,6 +62,49 @@ class Model:
         self.model = None
         self.vllm_model = None
 
+    def get_batch_MLP_activations(self, texts, batch_size=16, keep_all=True):
+        if self.model is None:
+            self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
+            # add hook to the model
+            self.hook = HookMLPActivation(self.model)
+            
+        mlp_activations_list = []
+        # HACK: TO TEST
+        logging.warning(f'HACK: move the first 600 samples to the end of the list')
+        texts = texts[600*batch_size:]
+        for i in tqdm(range(0, len(texts), batch_size), 
+                      desc='Generating MLP activations',
+                      total=len(texts)//batch_size,
+                      ncols=100):
+            batch_texts = texts[i:i+batch_size]
+            encoded_input = self.tokenizer(batch_texts, 
+                                           padding=True, 
+                                           return_tensors='pt',
+                                           ).to(self.model.device)
+            with torch.no_grad():
+                output = self.model(**encoded_input)
+            
+            # concat all the activations into a mat (bsz, n_layers, seq_len, hidden_size)
+            # each value in self.hook.activations is (bsz, seq_len, hidden_size)
+            act_mat = torch.cat([act.unsqueeze(dim=1).cpu() for act in self.hook.activations.values()], dim=1)
+            logging.debug(f'act_mat shape: {act_mat.shape}')
+            # only keep the last token
+            act_mat = act_mat[:, :, -1, :].squeeze() # (bsz, n_layers, hidden_size)
+            logging.debug(f'act_mat shape after keep last token: {act_mat.shape}')
+            # if keep all the layers
+            if keep_all:
+                mlp_activations_list.append(act_mat)
+            else:
+                # only keep the last layer
+                mlp_activations_list.append(act_mat[:, -1, :].squeeze())
+            # release memory
+            act_mat = None
+            self.hook.activations = {}
+        # release memory
+        self.model = None
+        return torch.cat(mlp_activations_list, dim=0)
+            
+            
     def get_batch_hidden_states(self, texts, batch_size=16, keep_all=True):
         # Method to process texts in batches
         if self.model is None:

@@ -46,7 +46,11 @@ def setup_model(args):
 #     return hidden_states
 
 def get_hidden_states(model:Model, text_inputs, args):
-    return model.get_batch_hidden_states(text_inputs,
+    if args.mlp:
+        return model.get_batch_MLP_activations(text_inputs,
+                                         keep_all=args.keep_all_hidden_layers)
+    else:
+        return model.get_batch_hidden_states(text_inputs,
                                          keep_all=args.keep_all_hidden_layers)
 
 def generate_answers(model:Model, text_inputs:List[str]):
@@ -94,6 +98,8 @@ def parse_arguments():
                          help='filename for saving text generations')
     parser.add_argument('--debug', action='store_true', default=False,
                          help='set to True to enable debug mode')
+    parser.add_argument('--mlp', action='store_true', default=False,
+                         help='set to True to use MLP activation hook')
     return parser.parse_args()
 
 if __name__ == "__main__":
