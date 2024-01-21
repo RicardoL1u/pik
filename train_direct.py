@@ -52,16 +52,14 @@ def parse_arguments():
     
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     fh.setFormatter(formatter)
+    # Add the file handler to the root logger
+    logging.getLogger('').addHandler(fh)
+    
     
     # logging all the args
     logging.info("===== Args =====")
     for arg in vars(args):
         logging.info("{}: {}".format(arg, getattr(args, arg)))
-    
-
-    # Add the file handler to the root logger
-    logging.getLogger('').addHandler(fh)
-    
     return args
 
 class Trainer:
