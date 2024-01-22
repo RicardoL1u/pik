@@ -69,9 +69,6 @@ class Model:
             self.hook = HookMLPActivation(self.model)
             
         mlp_activations_list = []
-        # HACK: TO TEST
-        logging.warning(f'HACK: move the first 600 samples to the end of the list')
-        texts = texts[600*batch_size:]
         for i in tqdm(range(0, len(texts), batch_size), 
                       desc='Generating MLP activations',
                       total=len(texts)//batch_size,
