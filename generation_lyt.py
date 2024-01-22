@@ -10,7 +10,8 @@ from pik.models.model import Model
 from pik.utils import (
     prompt_eng,
     load_dataset,
-    load_template
+    load_template,
+    load_example,
 )
 from typing import List
 import logging
@@ -105,6 +106,8 @@ def parse_arguments():
                          help='set to True to use MLP activation hook')
     parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa', 'gsm8k'],
                             help='dataset to use')
+    parser.add_argument('--example_file', default='data/trivia_qa/trivia_qa_examples.json',
+                            help='example file to use')
     parser.add_argument('--template', default='icl', choices=['icl', 'cot'],
                             help='template to use')
     parser.add_argument('--shot', type=int, default=4,
@@ -119,10 +122,11 @@ if __name__ == "__main__":
     )
     # Load data
     try:
-        dataset, examples, evaluate_answer = load_dataset(args.dataset)
-        template:str = load_template(args.template)
+        dataset, evaluate_answer = load_dataset(args.dataset)
         logging.info(f'Loaded {len(dataset)} instance data from {args.dataset}')
-        logging.info(f'Loaded {len(examples)} example data from {args.dataset}')
+        examples = load_example(args.example_file)
+        logging.info(f'Loaded {len(examples)} example data from {args.example_file}')
+        template:str = load_template(args.template)
         logging.info(f"Evaluating answers using {evaluate_answer.__name__}")
         logging.info(f'Using template: {args.template}')
     except FileNotFoundError as e:

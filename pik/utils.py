@@ -110,7 +110,6 @@ def load_dataset(dataset_name: str)->(List[dict], List[dict], callable):
     '''
     if dataset_name == 'trivia_qa':
         dataset = load_dataset_hf('data/trivia_qa', 'rc', split='validation')
-        examples = json.load(open('data/trivia_qa/example_qa_pairs.json', 'r'))
         evaluate_answer = evaluate_answer_trivia_qa
     elif dataset_name == 'gsm8k':
         ori_dataset = [json.loads(line) for line in open('data/gsm8k/train.jsonl', 'r')]
@@ -123,19 +122,18 @@ def load_dataset(dataset_name: str)->(List[dict], List[dict], callable):
                 # answer is like "600>>5,600 more calories.\n#### 5,600"}
                 'answer': data['answer'].split('\n#### ')[-1].replace(',','').strip()
             })
-        ori_examples = json.load(open('data/gsm8k/cot_example.json', 'r'))
-        examples = []
-        for example in ori_examples:
-            examples.append({
-                'question': example['question'],
-                'rationale': example['cot_answer'],
-                'answer': example['short_answer']
-            })
         
         evaluate_answer = evaluate_answer_gsm8k
     else:
         raise NotImplementedError(f'Unknown dataset: {dataset_name}')
-    return dataset, examples, evaluate_answer
+    return dataset, evaluate_answer
+
+def load_example(example_path:str)->List[dict]:
+    '''
+    Loads the example from the given directory.
+    '''
+    examples = json.load(open(example_path, 'r'))
+    return examples
 
 def load_template(template_type:str):
     '''
