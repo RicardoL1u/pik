@@ -7,8 +7,11 @@ import argparse
 import torch
 from tqdm import tqdm
 from pik.models.model import Model
-from datasets import load_dataset
-from pik.utils import prompt_eng, evaluate_answer
+from pik.utils import (
+    prompt_eng,
+    load_dataset,
+    load_template
+)
 from typing import List
 import logging
 import os
@@ -56,7 +59,7 @@ def get_hidden_states(model:Model, text_inputs, args):
 def generate_answers(model:Model, text_inputs:List[str]):
     return model.get_batch_text_generation(text_inputs)
 
-def evaluate_model_answers(dataset, output_text_list):
+def evaluate_model_answers(dataset, output_text_list, evaluate_answer:callable):
     results = []
     for idx, model_answers in tqdm(enumerate(output_text_list), 
                                    desc='Evaluating Answers', 
@@ -100,6 +103,12 @@ def parse_arguments():
                          help='set to True to enable debug mode')
     parser.add_argument('--mlp', action='store_true', default=False,
                          help='set to True to use MLP activation hook')
+    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa', 'gsm8k'],
+                            help='dataset to use')
+    parser.add_argument('--template', default='icl', choices=['icl', 'xshot'],
+                            help='template to use')
+    parser.add_argument('--shot', type=int, default=4,
+                         help='number of examples per question')
     return parser.parse_args()
 
 if __name__ == "__main__":
@@ -110,7 +119,12 @@ if __name__ == "__main__":
     )
     # Load data
     try:
-        dataset = load_dataset('data/trivia_qa', 'rc', split='validation')
+        dataset, examples, evaluate_answer = load_dataset(args.dataset)
+        template:str = load_template(args.template)
+        logging.info(f'Loaded {len(dataset)} instance data from {args.dataset}')
+        logging.info(f'Loaded {len(examples)} example data from {args.dataset}')
+        logging.info(f"Evaluating answers using {evaluate_answer.__name__}")
+        logging.info(f'Using template: {args.template}')
     except FileNotFoundError as e:
         logging.error(f"Data file not found: {e}")
         exit(1)
@@ -119,13 +133,14 @@ if __name__ == "__main__":
     model = setup_model(args)
 
     # Generate hidden states
-    text_inputs = [prompt_eng(data['question'], 10) for data in dataset]
+    text_inputs = [prompt_eng(data['question'], examples, template, args.shot) 
+                   for data in dataset]
     # Optionally limit number of questions
     if args.n_questions > 0:
         text_inputs = text_inputs[:args.n_questions]
     
     if args.debug:
-        text_inputs = text_inputs[:5]
+        text_inputs = text_inputs[:34]
         logging.debug('One Example of text_inputs:\n=======\n%s\n======', text_inputs[0])
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
         args.text_generations_filename = args.text_generations_filename.replace('.csv', '_debug.csv')
@@ -143,7 +158,7 @@ if __name__ == "__main__":
         output_text_list = generate_answers(model, text_inputs)
         # Save results
         logging.info(f'Saved text generations to {args.text_generations_filename}')
-        results:dict = evaluate_model_answers(dataset, output_text_list)
+        results:dict = evaluate_model_answers(dataset, output_text_list, evaluate_answer)
         with open(args.text_generations_filename, 'w') as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
     
