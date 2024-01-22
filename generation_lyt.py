@@ -105,7 +105,7 @@ def parse_arguments():
                          help='set to True to use MLP activation hook')
     parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa', 'gsm8k'],
                             help='dataset to use')
-    parser.add_argument('--template', default='icl', choices=['icl', 'xshot'],
+    parser.add_argument('--template', default='icl', choices=['icl', 'cot'],
                             help='template to use')
     parser.add_argument('--shot', type=int, default=4,
                          help='number of examples per question')
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         text_inputs = text_inputs[:34]
         logging.debug('One Example of text_inputs:\n=======\n%s\n======', text_inputs[0])
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
-        args.text_generations_filename = args.text_generations_filename.replace('.csv', '_debug.csv')
+        args.text_generations_filename = args.text_generations_filename.replace('.json', '_debug.json')
         
     if not os.path.exists(args.hidden_states_filename):
         
