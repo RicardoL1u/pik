@@ -79,7 +79,7 @@ class Trainer:
         
         self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
         # use xavier initialization
-        torch.nn.init.xavier_uniform_(self.model.ln.weight)
+        torch.nn.init.xavier_uniform_(self.model.model[0].weight)
         
         
         wandb_log(logging.INFO, self.use_wandb,
@@ -246,7 +246,7 @@ class Trainer:
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
         test_evals = df[df['split'] == 'test']['evaluation'].tolist()
         
-        plot_calibration(test_evals, test_preds, 
+        plot_calibration(test_evals, test_preds, 10,
                          file_name=os.path.join(self.args.output_dir, 'calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
         plot_training_loss(train_losses, self.args.logging_steps, 
