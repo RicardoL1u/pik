@@ -82,8 +82,6 @@ def evaluate_model_answers(dataset, output_text_list, evaluate_answer:callable):
 # Argument Parsing
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--n_questions', type=int, default=0,
-                         help='number of q-a pairs to generate, 0 for all')
     parser.add_argument('--model_checkpoint', '-m', default='MODELS/phi-1.5b',
                          help='model checkpoint to use')
     parser.add_argument('--n_answers_per_question', type=int, default=40,
@@ -133,21 +131,19 @@ if __name__ == "__main__":
         logging.error(f"Data file not found: {e}")
         exit(1)
 
-    # Initialize model
-    model = setup_model(args)
-
     # Generate hidden states
     text_inputs = [prompt_eng(data['question'], examples, template, args.shot) 
                    for data in dataset]
-    # Optionally limit number of questions
-    if args.n_questions > 0:
-        text_inputs = text_inputs[:args.n_questions]
-    
+
     if args.debug:
-        text_inputs = text_inputs[:34]
-        logging.debug('One Example of text_inputs:\n=======\n%s\n======', text_inputs[0])
+        text_inputs = text_inputs[155*32:160*32]
+        for idx, text in enumerate(text_inputs, start=157*32):
+            logging.debug('Idx %s Example of text_inputs:\n=======\n%s\n======', idx, text)
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
         args.text_generations_filename = args.text_generations_filename.replace('.json', '_debug.json')
+      
+    # Initialize model
+    model = setup_model(args) 
         
     if not os.path.exists(args.hidden_states_filename):
         
