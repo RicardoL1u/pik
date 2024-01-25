@@ -62,7 +62,7 @@ class Model:
         self.model = None
         self.vllm_model = None
 
-    def get_batch_MLP_activations(self, texts, batch_size=16, keep_all=True):
+    def get_batch_MLP_activations(self, texts, batch_size=32, keep_all=True):
         if self.model is None:
             self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
             # add hook to the model
