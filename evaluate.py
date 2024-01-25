@@ -22,6 +22,7 @@ def parse_arguments():
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
     parser.add_argument('--debug', action='store_true', help='Debug mode.')
+    parser.add_argument('--device', default='cuda', help='Device to use.')
     parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
                     help='Model layer index(es), which layer(s) to use. None for all layers, \
                     or specify indices separated by commas (e.g., 0,2,4).')
@@ -42,18 +43,27 @@ def setup_logging(args):
 
 if __name__ == '__main__':
     
-    torch.set_default_dtype(torch.float16)
     
     args = parse_arguments()
+    if 'cuda' in args.device:
+        torch.set_default_dtype(torch.float16)
+        precision = torch.float16
+    else:
+        torch.set_default_dtype(torch.float32)
+        precision = torch.float32
+        
     logger = setup_logging(args)
     logging.info("Loading dataset from {} and {}" \
                  .format(args.hidden_states_filename, args.text_generations_filename))
     dataset = DirectHiddenStatesDataset(
         hs_file = args.hidden_states_filename, 
         tg_file = args.text_generations_filename,
-        layer_idx = args.model_layer_idx
+        layer_idx = args.model_layer_idx,
+        precision=precision,
+        device = args.device,
+        rebalance=False
     )
-    model = LinearProbe(dims=dataset.hidden_states.shape[1]).to('cuda')
+    model = LinearProbe(dims=dataset.hidden_states.shape[1]).to(args.device)
     logging.info("Loading model checkpoint from {}".format(args.model_ckpt_path))
     try:
         model.load_state_dict(torch.load(args.model_ckpt_path))
@@ -79,11 +89,11 @@ if __name__ == '__main__':
     # plt the scatter plot
     figure_path = args.model_ckpt_path.replace('.pt', args.dataset+'_scatter.png')
     plt.figure(figsize=(8,8))
-    plt.scatter(labels, preds, alpha=0.5)
+    plt.scatter(preds, labels, alpha=0.5)
     plt.xlabel('pik labels')
     plt.ylabel('predictions')
     plt.xlim(0,1)
     plt.ylim(0,1)
     plt.savefig(figure_path)
     
-    plot_calibration(labels, preds, num_bins=10, file_name=figure_path.replace('.png', '_calibration.png'))
+    plot_calibration(preds, labels, num_bins=10, file_name=figure_path.replace('.png', '_calibration.png'))
