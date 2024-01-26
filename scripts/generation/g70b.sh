@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=4,5,6,7
+export CUDA_VISIBLE_DEVICES=1,2,5,6
 
 model=llama-2-70b
 datafolder=data/$model
@@ -10,6 +10,6 @@ python generation_lyt.py \
     --temperature 1 \
     --pad_token_id 50256 \
     --keep_all_hidden_layers \
-    --hidden_states_filename $datafolder/hidden_states.pt \
-    --text_generations_filename $datafolder/text_generations.csv
-    
+    --hidden_states_filename $datafolder/act_mlp.pt \
+    --text_generations_filename $datafolder/text_generations.csv \
+    --debug   

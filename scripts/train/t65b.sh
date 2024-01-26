@@ -1,5 +1,5 @@
 export CUDA_VISIBLE_DEVICES=7
-model="llama-30b-hf"
+model="llama-65b-hf"
 num_epochs=100
 batch_size=64
 learning_rate=1e-5
@@ -30,7 +30,6 @@ python $training_script \
     --output_dir  $output_dir \
     --hidden_states_filename data/$model/hidden_states.pt \
     --text_generations_filename data/$model/text_generations.csv \
-    --use_wandb \
     --device cuda \
     --logging_steps 100 \
     --wandb_run_name $wandb_run_name

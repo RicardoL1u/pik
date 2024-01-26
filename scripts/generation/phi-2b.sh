@@ -1,6 +1,6 @@
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=6
 
-model=llama-2-13b
+model=phi-2b
 datafolder=data/$model
 mkdir -p $datafolder
 python generation_lyt.py \
@@ -10,6 +10,6 @@ python generation_lyt.py \
     --temperature 1 \
     --pad_token_id 50256 \
     --keep_all_hidden_layers \
-    --hidden_states_filename $datafolder/mlp_act.pt \
-    --text_generations_filename $datafolder/text_generations_alias.csv \
-    --mlp
+    --hidden_states_filename $datafolder/hidden_states.pt \
+    --text_generations_filename $datafolder/text_generations.csv \
+    --debug
