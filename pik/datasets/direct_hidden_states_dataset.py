@@ -36,18 +36,10 @@ class DirectHiddenStatesDataset(Dataset):
         self.hidden_states = hs
         logging.info('hidden_states.shape={}'.format(self.hidden_states.shape))
 
-        self.text_generations: dict = json.load(open(tg_file, 'r'))
-
-        # Compute mean evaluations for each 'hid' in a more efficient way
-        evaluation_list = defaultdict(list)
-        for _, row in enumerate(self.text_generations):
-            evaluation_list[row['hid']].append(row['evaluation'])
-
-        # Calculate mean evaluations
-        mean_evaluations = {hid: np.mean(evaluation_list[hid]) for hid in evaluation_list}
+        self.text_generations: list = json.load(open(tg_file, 'r'))
 
         # Create pik_labels using a vectorized operation
-        self.pik_labels = np.array([mean_evaluations.get(hid, np.nan) for hid in range(self.hidden_states.shape[0])])
+        self.pik_labels = np.array([sample['evaluation'] for sample in self.text_generations])
 
         # Assert there is no nan in pik_labels
         assert not np.isnan(self.pik_labels).any(), 'pik_labels contains nan'
