@@ -66,17 +66,14 @@ def evaluate_model_answers(dataset, output_text_list, evaluate_answer:callable):
                                    desc='Evaluating Answers', 
                                    total=len(output_text_list)):
         question, correct_answer = dataset[idx]['question'], dataset[idx]['answer']
-        for n, model_answer in enumerate(model_answers):
-            evaluation = evaluate_answer(model_answer, correct_answer)
-            results.append({
-                'hid': idx, # hid is same as qid
-                'qid': idx,
-                'n': n,
-                'question': question,
-                'answer': correct_answer,
-                'model_answer': model_answer,
-                'evaluation': evaluation,
-            })
+        results.append({
+            'qid': idx,
+            'question': question,
+            'answer': correct_answer,
+            'model_answers': model_answers,
+            'unit_evaluations': [evaluate_answer(model_answer, correct_answer) for model_answer in model_answers],
+        })
+        results[-1]['evaluation'] = sum(results[-1]['unit_evaluations'])/len(results[-1]['unit_evaluations'])
     return results
 
 # Argument Parsing
@@ -102,7 +99,7 @@ def parse_arguments():
                          help='set to True to enable debug mode')
     parser.add_argument('--mlp', action='store_true', default=False,
                          help='set to True to use MLP activation hook')
-    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa', 'gsm8k'],
+    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa_wiki', 'gsm8k'],
                             help='dataset to use')
     parser.add_argument('--example_file', default='data/trivia_qa/trivia_qa_examples.json',
                             help='example file to use')
@@ -136,8 +133,8 @@ if __name__ == "__main__":
                    for data in dataset]
 
     if args.debug:
-        text_inputs = text_inputs[155*32:160*32]
-        for idx, text in enumerate(text_inputs, start=157*32):
+        text_inputs = text_inputs[:100]
+        for idx, text in enumerate(text_inputs):
             logging.debug('Idx %s Example of text_inputs:\n=======\n%s\n======', idx, text)
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
         args.text_generations_filename = args.text_generations_filename.replace('.json', '_debug.json')
@@ -159,6 +156,7 @@ if __name__ == "__main__":
         # Save results
         logging.info(f'Saved text generations to {args.text_generations_filename}')
         results:dict = evaluate_model_answers(dataset, output_text_list, evaluate_answer)
+        logging.info(f'The mean of evaluation is {sum([result["evaluation"] for result in results])/len(results)}')
         with open(args.text_generations_filename, 'w') as f:
             json.dump(results, f, indent=4, ensure_ascii=False)
     
