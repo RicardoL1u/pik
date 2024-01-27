@@ -83,9 +83,11 @@ def evaluate_answer_trivia_qa(model_answer, dataset_answer, exact_match=False):
     '''
     # use alias in dataset_answer
     all_possible_answer = dataset_answer['normalized_aliases'] + [dataset_answer['normalized_value']]
+    min_answer_len = min([len(ans) for ans in all_possible_answer])
     if exact_match:
         return any([model_answer == normalize_answer(ans) for ans in all_possible_answer])
-    return any([normalize_answer(model_answer) in normalize_answer(ans) for ans in all_possible_answer])
+    normalized_model_answer = normalize_answer(model_answer)
+    return any([ans in normalized_model_answer for ans in all_possible_answer])
 
 def evaluate_answer_gsm8k(model_answer:str, dataset_answer:str, exact_match=True):
     '''
@@ -108,8 +110,8 @@ def load_dataset(dataset_name: str)->(List[dict], List[dict], callable):
     '''
     Loads the dataset from the given directory.
     '''
-    if dataset_name == 'trivia_qa':
-        dataset = load_dataset_hf('data/trivia_qa', 'rc', split='validation')
+    if dataset_name == 'trivia_qa_wiki':
+        dataset = load_dataset_hf('data/trivia_qa_wiki', split='validation')
         evaluate_answer = evaluate_answer_trivia_qa
     elif dataset_name == 'gsm8k':
         ori_dataset = [json.loads(line) for line in open('data/gsm8k/train.jsonl', 'r')]
