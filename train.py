@@ -197,55 +197,6 @@ class Trainer:
         
         plot_calibration(test_evals, test_preds, file_name=os.path.join(self.args.output_dir, 'calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
-    # def validate_model(model, val_loader, args):
-    #     loss_fn = torch.nn.BCELoss()
-    #     val_losses = []
-    #     model.eval()
-    #     with torch.no_grad():
-    #         for hs, labels in tqdm(val_loader, leave=False):
-    #             hs, labels = hs.to(args.device), labels.to(args.device)
-    #             outputs = model(hs)
-    #             loss = loss_fn(outputs, labels)
-    #             val_losses.append(loss.item())
-    #     return val_losses
-    
-
-    # def evaluate_model(model, test_loader, args):
-    #     loss_fn = torch.nn.BCELoss()
-    #     test_losses = []
-    #     model.eval()
-    #     with torch.no_grad():
-    #         for hs, labels in tqdm(test_loader, leave=False):
-    #             hs, labels = hs.to(args.device), labels.to(args.device)
-    #             outputs = model(hs)
-    #             loss = loss_fn(outputs, labels)
-    #             test_losses.append(loss.item())
-    #     return test_losses
-
-# def plot_losses(train_losses, test_losses):
-#     plt.figure(figsize=(10, 5))
-#     plt.plot(train_losses, label='Train Loss')
-#     plt.plot(test_losses, label='Test Loss')
-#     plt.title('Training and Testing Losses')
-#     plt.xlabel('Epochs')
-#     plt.ylabel('Loss')
-#     plt.legend()
-#     plt.show()
-
-# def calculate_brier_scores(df):
-#     df['sq_errors'] = (df['evaluation'] - df['prediction']) ** 2
-#     train_brier = df[df['split'] == 'train']['sq_errors'].mean()
-#     test_brier = df[df['split'] == 'test']['sq_errors'].mean()
-#     return train_brier, test_brier
-
-# def plot_calibration(calib):
-#     sns.relplot(data=calib, x='evaluation', y='prediction', hue='split', aspect=1.0, height=6)
-#     plt.title('Calibration Plot')
-#     plt.xlabel('Evaluation')
-#     plt.ylabel('Prediction')
-#     plt.show()
-
-# Main Execution
 
 if __name__ == "__main__":
     args = parse_arguments()
@@ -258,18 +209,3 @@ if __name__ == "__main__":
 
     train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
 
-    # train_loader, val_loader, test_loader, dataset = load_and_split_dataset(args)
-
-    # model = LinearProbe(dataset.hidden_states.shape[-1]).to(args.device)
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate)
-
-    # train_losses = train_model(model, train_loader, args)
-    # test_losses = evaluate_model(model, test_loader, args)
-
-    # plot_losses(train_losses, test_losses)
-
-    # # Additional logic for predictions, calibration, and Brier scores
-    # train_brier, test_brier = calculate_brier_scores(df)
-    # print(f'Train Brier score: {train_brier:.4f}, Test Brier score: {test_brier:.4f}')
-
-    # plot_calibration(calib)
