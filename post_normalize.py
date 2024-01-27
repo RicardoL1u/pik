@@ -1,5 +1,5 @@
 import pandas as pd
-from pik.utils import normalize_answer, evaluate_answer
+from pik.utils.utils import normalize_answer, evaluate_answer
 
 # 7b, 13b ,30b, 65b
 for model in ['llama-7b-hf', 'llama-13b-hf', 'llama-30b-hf', 'llama-65b-hf']:

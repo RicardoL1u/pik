@@ -5,7 +5,7 @@ import logging
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from try_to_plot import plot_calibration
+from pik.utils.try_to_plot import plot_calibration
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 def parse_arguments():

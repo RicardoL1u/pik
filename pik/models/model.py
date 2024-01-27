@@ -1,6 +1,6 @@
 import torch
 from transformers import  AutoTokenizer, AutoModelForCausalLM
-from pik.utils import normalize_answer
+from pik.utils.utils import normalize_answer
 from vllm import LLM, SamplingParams
 from .hook_tool import HookMLPActivation
 import re

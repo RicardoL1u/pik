@@ -7,7 +7,7 @@ import argparse
 import torch
 from tqdm import tqdm
 from pik.models.model import Model
-from pik.utils import (
+from pik.utils.utils import (
     prompt_eng,
     load_dataset,
     load_template,

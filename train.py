@@ -10,8 +10,8 @@ from pik.models.linear_probe import LinearProbe
 from tqdm import tqdm
 import os
 import wandb
-from pik.utils import wandb_log
-from try_to_plot import plot_calibration, plot_and_save_scatter
+from pik.utils.utils import wandb_log
+from pik.utils.try_to_plot import plot_calibration, plot_and_save_scatter
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # Function Definitions
