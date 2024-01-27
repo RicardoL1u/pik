@@ -5,7 +5,7 @@ from transformers import get_scheduler
 import torch
 from torch.utils.data import DataLoader, Subset
 from pik.datasets.direct_hidden_states_dataset import DirectHiddenStatesDataset
-from pik.models.linear_probe import LinearProbe
+from pik.models.linear_probe import LinearProbe, MLP
 from tqdm import tqdm
 import os
 import wandb
@@ -39,6 +39,7 @@ def parse_arguments():
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     parser.add_argument('--logging_level', default='INFO', help='logging level')
+    parser.add_argument('--rebalance', type=bool, default=False, help='whether to rebalance the dataset')
     parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
                     help='Model layer index(es), which layer(s) to use. None for all layers, \
                     or specify indices separated by commas (e.g., 0,2,4).')
@@ -75,7 +76,9 @@ class Trainer:
             tg_file=args.text_generations_filename,
             precision=args.precision,
             layer_idx=args.model_layer_idx,
-            device=args.device)
+            rebalance=args.rebalance,
+            device=args.device
+        )
         
         self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
         # use xavier initialization
