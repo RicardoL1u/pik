@@ -9,12 +9,16 @@ from tqdm import tqdm
 import logging
 def is_large_model(model_checkpoint):
     model_checkpoint = model_checkpoint.lower()
-    # Using regex to extract the number which may have a decimal part
-    model_size = re.search(r'\d+(\.\d+)?b', model_checkpoint).group(0)
-    # Convert the extracted string to float
-    model_size = float(model_size[:-1])
-    logging.info(f'{model_checkpoint} is a {model_size}B model')
-    return model_size > 13
+    try:
+        # Using regex to extract the number which may have a decimal part
+        model_size = re.search(r'\d+(\.\d+)?b', model_checkpoint).group(0)
+        # Convert the extracted string to float
+        model_size = float(model_size[:-1])
+        logging.info(f'{model_checkpoint} is a {model_size}B model')
+        return model_size > 2
+    except:
+        logging.warning(f'Cannot determine the size of {model_checkpoint}. Assuming it is a small model')
+        return False
 
 def load_model(model_checkpoint, is_vllm=False):
     if is_large_model(model_checkpoint):
