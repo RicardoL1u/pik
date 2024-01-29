@@ -5,7 +5,8 @@ from transformers import get_scheduler
 import torch
 from torch.utils.data import DataLoader, Subset
 from pik.datasets.direct_hidden_states_dataset import DirectHiddenStatesDataset
-from pik.models.linear_probe import LinearProbe, MLP
+from pik.datasets.hidden_states_dataset import HiddenStatesDataset
+from pik.models.linear_probe import LinearProbe, MLPProbe
 from tqdm import tqdm
 import os
 import wandb
@@ -15,9 +16,16 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # Function Definitions
 
+
+# set seed
+import random
+random.seed(42)
+torch.manual_seed(42)
+np.random.seed(42)
+
 def parse_arguments():
     def parse_layers(arg):
-        if arg.lower() == 'none':
+        if arg.lower() == 'all':
             return None
         try:
             return [int(layer.strip()) for layer in arg.split(',')]
@@ -39,7 +47,9 @@ def parse_arguments():
     parser.add_argument('--wandb_run_name', default='linear_probe', help='wandb run name')
     parser.add_argument('--logging_steps', type=int, default=10, help='logging steps')
     parser.add_argument('--logging_level', default='INFO', help='logging level')
-    parser.add_argument('--rebalance', type=bool, default=False, help='whether to rebalance the dataset')
+    parser.add_argument('--direct', action='store_true', default=False, help='whether to use direct hidden states')
+    parser.add_argument('--rebalance', action='store_true', default=False, help='whether to rebalance the dataset')
+    parser.add_argument('--debug', action='store_true', default=False, help='set to True to enable debug mode')
     parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
                     help='Model layer index(es), which layer(s) to use. None for all layers, \
                     or specify indices separated by commas (e.g., 0,2,4).')
@@ -70,8 +80,15 @@ class Trainer:
         self.args.precision = torch.float16 if args.precision == 'float16' else torch.float32
         torch.set_default_dtype(args.precision)
         
+        logging.info("===== Loading Data =====")
+        dataset_cls = DirectHiddenStatesDataset if args.direct else HiddenStatesDataset
+        logging.info("Using {} dataset".format(dataset_cls.__name__))
+        
+        self.loss_fn = torch.nn.MSELoss() if args.direct else torch.nn.BCEWithLogitsLoss()
+        logging.info("Using {} loss function".format(self.loss_fn.__class__.__name__))
+        
         # Load dataset...
-        self.dataset = DirectHiddenStatesDataset(
+        self.dataset = dataset_cls(
             hs_file=args.hidden_states_filename,
             tg_file=args.text_generations_filename,
             precision=args.precision,
@@ -80,7 +97,7 @@ class Trainer:
             device=args.device
         )
         
-        self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
+        self.model = MLPProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
         # use xavier initialization
         torch.nn.init.xavier_uniform_(self.model.model[0].weight)
         
@@ -100,22 +117,40 @@ class Trainer:
         self.test_hids = \
             permuted_hids[:train_len], permuted_hids[train_len:train_len+val_len], permuted_hids[train_len+val_len:]
         
+        if args.debug:
+            self.train_hids = self.train_hids[:100]
+            self.val_hids = self.val_hids[:100]
+            self.test_hids = self.test_hids[:100]
+        
+        if not args.direct:
+            # need convert the hid to index
+            self.train_idx = []
+            
+            # for example the per_unit_labels is 5, hids = [0,2,7]
+            # idx = [0,1,2,3,4,10,11,12,13,14,35,36,37,38,39]
+            wandb_log(logging.INFO, self.use_wandb, "There are {} per unit labels".format(self.dataset.per_unit_labels))
+            wandb_log(logging.INFO, self.use_wandb, "Converting hids to idx...")
+            for hid in self.train_hids:
+                self.train_idx.extend([hid * self.dataset.per_unit_labels + i for i in range(self.dataset.per_unit_labels)])
+        
+        else:
+            self.train_idx = self.train_hids
+         
         wandb_log(logging.INFO, self.use_wandb, "There are {} train hids".format(len(self.train_hids)))
         wandb_log(logging.INFO, self.use_wandb, "There are {} val hids".format(len(self.val_hids)))
         wandb_log(logging.INFO, self.use_wandb, "There are {} test hids".format(len(self.test_hids)))
 
         
         # Create DataLoader for train and test sets...
-        self.train_loader = DataLoader(Subset(self.dataset, self.train_hids), batch_size=args.batch_size, shuffle=True)
-        self.val_loader = DataLoader(Subset(self.dataset, self.test_hids), batch_size=args.batch_size, shuffle=True)
-        self.test_loader = DataLoader(Subset(self.dataset, self.test_hids), batch_size=args.batch_size, shuffle=True)
-        
+        self.train_loader = DataLoader(Subset(self.dataset, self.train_idx), batch_size=args.batch_size, shuffle=True)
+        logging.info("There are {} samples and {} batches in the train loader".\
+                        format(len(self.train_loader.dataset), len(self.train_loader)))
         
     def trainning_loop(self):
         
         optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.learning_rate)
         # use l2 loss
-        loss_fn = torch.nn.MSELoss()
+        loss_fn = self.loss_fn
         
         train_losses = []
 
@@ -155,7 +190,7 @@ class Trainer:
                 l2_reg = torch.tensor(0.).to(self.args.device)
                 for param in self.model.parameters():
                     l2_reg += torch.norm(param)**2
-                loss += 0.01 * l2_reg
+                loss += 0.001 * l2_reg
                 
                 loss.backward()
                 optimizer.step()
@@ -200,6 +235,8 @@ class Trainer:
             wandb.finish()   
         return train_losses, train_metrics, val_metrics, test_metrics
 
+    
+    
     def prediction(self):
         all_hs = self.dataset.hidden_states
         self.model.eval()
@@ -216,6 +253,9 @@ class Trainer:
         val_brier = np.mean((labels[self.val_hids] - preds[self.val_hids]) ** 2)
         # for test set
         test_brier = np.mean((labels[self.test_hids] - preds[self.test_hids]) ** 2)
+        if self.args.debug:
+            # for train set
+            val_brier = train_brier
         return train_brier, val_brier, test_brier
     
     def plot_scatters_to_wandb(self, preds, labels, train_losses):
