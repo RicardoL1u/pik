@@ -111,7 +111,7 @@ def load_dataset(dataset_name: str)->(List[dict], List[dict], callable):
     Loads the dataset from the given directory.
     '''
     if dataset_name == 'trivia_qa_wiki':
-        dataset = load_dataset_hf('data/trivia_qa_wiki', split='validation')
+        dataset = load_dataset_hf('data/trivia_qa_wiki/rc.wikipedia.nocontext', split='validation')
         evaluate_answer = evaluate_answer_trivia_qa
     elif dataset_name == 'gsm8k':
         ori_dataset = [json.loads(line) for line in open('data/gsm8k/train.jsonl', 'r')]
