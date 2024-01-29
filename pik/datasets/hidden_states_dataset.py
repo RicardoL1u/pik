@@ -40,7 +40,7 @@ class HiddenStatesDataset(Dataset):
         # unit_labels 
         self.unit_labels = []
         for sample in self.text_generations:
-            self.unit_labels.extend(sample['unit_evaluation'])
+            self.unit_labels.extend(sample['unit_evaluations'])
         self.unit_labels = np.array(self.unit_labels).astype(int)    
         
         
