@@ -15,7 +15,7 @@ class DirectHiddenStatesDataset(Dataset):
                  tg_file='text_generations.csv',
                  precision=torch.float16,
                  layer_idx: Optional[Union[int, List[int]]] = None,  
-                 rebalance: bool = True,
+                 rebalance: bool = False,
                  # layer_idx could be a list of integers or a single integer
                  device='cuda'):
         self.layer_idx = layer_idx
@@ -64,53 +64,3 @@ class DirectHiddenStatesDataset(Dataset):
     def get_pik_label(self, hid):
         return self.pik_labels[hid]
     
-
-    def _rebalance(self, oversample=True):
-        if not oversample:
-            raise NotImplementedError("Undersampling not implemented")
-
-        # Divide pik_labels into bins
-        bins = np.linspace(0, 1, 11) # 10 bins from 0 to 1
-        bin_indices = np.digitize(self.pik_labels, bins) - 1 # numpy's digitize returns 1-based indices
-
-        # Count samples in each bin
-        bin_counts = np.bincount(bin_indices, minlength=len(bins) - 1)
-        logging.info("Before rebalancing, bin_counts={}".format(bin_counts))
-        
-        # Calculate maximum number of samples in any bin
-        max_samples = np.max(bin_counts)
-
-        # desired number of samples in each bin
-        desired_samples = max_samples // 3
-        
-        # Identify underrepresented bins and calculate oversampling factor
-        oversampling_factor = desired_samples / bin_counts
-        
-        # for factor < 1, set to 1
-        oversampling_factor[oversampling_factor < 1] = 1
-        
-        # Duplicate samples
-        new_hidden_states = []
-        new_pik_labels = []
-        for i in range(len(self.hidden_states)):
-            bin_idx = bin_indices[i]
-            factor = int(oversampling_factor[bin_idx])
-
-            for _ in range(factor):
-                new_hidden_states.append(self.hidden_states[i])
-                new_pik_labels.append(self.pik_labels[i])
-        
-        # print the new bin counts
-        new_bin_indices = np.digitize(new_pik_labels, bins) - 1
-        new_bin_counts = np.bincount(new_bin_indices, minlength=len(bins) - 1)
-        logging.info("After rebalancing, new_bin_counts={}".format(new_bin_counts))
-        
-        # Convert lists to appropriate formats
-        self.hidden_states = torch.stack(new_hidden_states)
-        self.pik_labels = np.array(new_pik_labels)
-
-        # Shuffle dataset
-        shuffling_idx = torch.randperm(len(self.hidden_states))
-        self.hidden_states = self.hidden_states[shuffling_idx]
-        self.pik_labels = self.pik_labels[shuffling_idx]
-

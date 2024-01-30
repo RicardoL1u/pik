@@ -10,6 +10,7 @@ from pik.models.linear_probe import LinearProbe, MLPProbe
 from tqdm import tqdm
 import os
 import wandb
+import time
 from pik.utils.utils import wandb_log
 from pik.utils.try_to_plot import plot_calibration, plot_and_save_scatter, plot_training_loss
 import logging
@@ -58,7 +59,7 @@ def parse_arguments():
     logging.getLogger().setLevel(args.logging_level)
     logging.info(f'Logging level set to {args.logging_level}')
     
-    fh = logging.FileHandler(os.path.join(args.output_dir, 'train_direct.log'))
+    fh = logging.FileHandler(os.path.join(args.output_dir, f'train_direct_{time.strftime("%Y%m%d-%H%M%S")}.log'))
     fh.setLevel(logging.DEBUG)
     
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -93,11 +94,11 @@ class Trainer:
             tg_file=args.text_generations_filename,
             precision=args.precision,
             layer_idx=args.model_layer_idx,
-            rebalance=args.rebalance,
+            # rebalance=args.rebalance,
             device=args.device
         )
         
-        self.model = MLPProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
+        self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
         # use xavier initialization
         torch.nn.init.xavier_uniform_(self.model.model[0].weight)
         
@@ -122,6 +123,46 @@ class Trainer:
             self.val_hids = self.val_hids[:100]
             self.test_hids = self.test_hids[:100]
         
+        if args.rebalance:
+            
+            bins = np.linspace(0, 1, 11)
+            train_labels = self.dataset.pik_labels[self.train_hids]
+            bin_indices = np.digitize(train_labels, bins) - 1 # numpy's digitize returns 1-based indices
+            
+            # Count samples in each bin
+            bin_counts = np.bincount(bin_indices, minlength=len(bins) - 1)
+            logging.info("Before rebalancing, bin_counts={}, toal hid={}".format(bin_counts, len(self.train_hids)))
+            
+            # Calculate maximum number of samples in any bin
+            max_samples = np.max(bin_counts)
+
+            # desired number of samples in each bin
+            desired_samples = 1000
+            
+            # Identify underrepresented bins and calculate oversampling factor
+            oversampling_factor = desired_samples / bin_counts
+            
+            # for factor < 1, set to 1
+            # oversampling_factor[oversampling_factor < 1] = 1
+            
+            # repeat the hids based on the oversampling factor
+            new_train_hids = []
+            for i in range(len(self.train_hids)):
+                bin_idx = bin_indices[i]
+                if oversampling_factor[bin_idx] > 1:
+                    factor = int(oversampling_factor[bin_idx])
+                    new_train_hids.extend([self.train_hids[i]] * factor)
+                else:
+                    if random.random() < oversampling_factor[bin_idx]:
+                        new_train_hids.append(self.train_hids[i])
+            
+            new_train_labels = self.dataset.pik_labels[new_train_hids]
+            new_bin_indices = np.digitize(new_train_labels, bins) - 1
+            new_bin_counts = np.bincount(new_bin_indices, minlength=len(bins) - 1)
+            logging.info("After rebalancing, new_bin_counts={}, toal hid={}".format(new_bin_counts, len(new_train_hids)))
+            
+            self.train_hids = new_train_hids
+         
         if not args.direct:
             # need convert the hid to index
             self.train_idx = []
@@ -134,13 +175,13 @@ class Trainer:
                 self.train_idx.extend([hid * self.dataset.per_unit_labels + i for i in range(self.dataset.per_unit_labels)])
         
         else:
-            self.train_idx = self.train_hids
-         
+            self.train_idx = self.train_hids 
+        
         wandb_log(logging.INFO, self.use_wandb, "There are {} train hids".format(len(self.train_hids)))
         wandb_log(logging.INFO, self.use_wandb, "There are {} val hids".format(len(self.val_hids)))
         wandb_log(logging.INFO, self.use_wandb, "There are {} test hids".format(len(self.test_hids)))
 
-        
+
         # Create DataLoader for train and test sets...
         self.train_loader = DataLoader(Subset(self.dataset, self.train_idx), batch_size=args.batch_size, shuffle=True)
         logging.info("There are {} samples and {} batches in the train loader".\
@@ -261,7 +302,7 @@ class Trainer:
     def plot_scatters_to_wandb(self, preds, labels, train_losses):
         # plot scatter
         df = pd.DataFrame({'evaluation': labels, 'prediction': preds})
-        df['split'] = 'test'
+        df.loc[self.test_hids, 'split'] = 'test'
         df.loc[self.train_hids, 'split'] = 'train'
         df.loc[self.val_hids, 'split'] = 'val'
 
@@ -289,7 +330,7 @@ class Trainer:
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
         test_evals = df[df['split'] == 'test']['evaluation'].tolist()
         
-        plot_calibration(test_evals, test_preds, 10,
+        plot_calibration(test_evals, test_preds, 20,
                          file_name=os.path.join(self.args.output_dir, 'calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
         plot_training_loss(train_losses, self.args.logging_steps, 
