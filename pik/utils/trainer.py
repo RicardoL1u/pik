@@ -6,7 +6,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from pik.datasets.direct_hidden_states_dataset import DirectHiddenStatesDataset
 from pik.datasets.hidden_states_dataset import HiddenStatesDataset
-from pik.models.linear_probe import LinearProbe, MLPProbe
+from pik.models.probe_model import LinearProbe, MLPProbe
 from tqdm import tqdm
 import os
 import wandb
