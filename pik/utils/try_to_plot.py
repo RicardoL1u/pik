@@ -6,6 +6,12 @@ def plot_calibration(x_list, y_list, num_bins=10, file_name='calibration_plot.pn
     # Zip and sort the x and y values
     xy_tuples = sorted(zip(x_list, y_list), key=lambda x: x[0])
 
+    # bins = np.linspace(0, 1, num_bins + 1)
+    
+    # # group xy_tuples into bins, each bin is a list of tuples
+    # xy_grouped = [[sample for sample in xy_tuples if sample[0] >= bins[i] and sample[0] < bins[i+1]]
+    #               for i in range(num_bins)]
+    
     # Group into bins
     total_num = len(xy_tuples)
     xy_grouped = [xy_tuples[int(i * total_num / num_bins): int((i + 1) * total_num / num_bins)] 
@@ -59,7 +65,7 @@ def plot_and_save_scatter(df, output_dir):
     # Function to plot individual scatter plot for each split
     def plot_split(df_split, color, label, file_suffix):
         fig, ax = plt.subplots(figsize=(10, 10))
-        plt.scatter(df_split['evaluation'], df_split['prediction'], s=100, c=color, marker='o', label=label)
+        plt.scatter(df_split['evaluation'], df_split['prediction'], s=2, c=color, marker='o', label=label)
         plt.plot([0, 1], [0, 1], color='black', linestyle='--')
         plt.xlim(0, 1)
         plt.ylim(0, 1)
