@@ -79,7 +79,7 @@ class Trainer:
         self.args = args
         self.use_wandb = args.use_wandb
         self.args.precision = torch.float16 if args.precision == 'float16' else torch.float32
-        torch.set_default_dtype(args.precision)
+        # torch.set_default_dtype(args.precision)
         
         logging.info("===== Loading Data =====")
         dataset_cls = DirectHiddenStatesDataset if args.direct else HiddenStatesDataset
@@ -98,9 +98,14 @@ class Trainer:
             device=args.device
         )
         
-        self.model = LinearProbe(self.dataset.hidden_states.shape[-1]).to(args.device)
-        # use xavier initialization
-        torch.nn.init.xavier_uniform_(self.model.model[0].weight)
+        self.model = self.probe_cls(self.dataset.hidden_states.shape[-1]).to(args.device)
+        # set precision
+        if args.precision == torch.float16:
+            self.model = self.model.half()
+        # use xavier initialization for all the layers
+        # for name, param in self.model.named_parameters():
+        #     if 'weight' in name:
+        #         torch.nn.init.xavier_uniform_(param)
         
         
         wandb_log(logging.INFO, self.use_wandb,
@@ -189,9 +194,10 @@ class Trainer:
         
     def trainning_loop(self):
         
-        optimizer = torch.optim.SGD(self.model.parameters(), lr=self.args.learning_rate)
+        self.model.to(self.args.device)
+        optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.args.learning_rate)
         # use l2 loss
-        loss_fn = self.loss_fn
+        loss_fn = self.loss_fn.to(self.args.device)
         
         train_losses = []
 
