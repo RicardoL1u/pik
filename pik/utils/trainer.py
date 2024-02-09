@@ -233,7 +233,7 @@ class Trainer:
             for hs, labels in self.train_loader:
                 hs = hs.to(self.args.device)
                 labels = labels.unsqueeze(1).type(self.args.precision).to(self.args.device)
-                optimizer.zero_grad()
+                
                 outputs = self.model(hs)
                 
                 loss = loss_fn(outputs, labels)
@@ -243,6 +243,7 @@ class Trainer:
                     l2_reg += torch.norm(param)**2
                 loss += 0.001 * l2_reg
                 
+                optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
