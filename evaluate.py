@@ -1,5 +1,5 @@
 from pik.datasets.direct_hidden_states_dataset import DirectHiddenStatesDataset
-from pik.models.linear_probe import LinearProbe
+from pik.models.probe_model import LinearProbe
 import argparse
 import logging
 import torch
