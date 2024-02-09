@@ -60,6 +60,11 @@ def parse_arguments():
     logging.getLogger().setLevel(args.logging_level)
     logging.info(f'Logging level set to {args.logging_level}')
     
+    if args.debug:
+        args.logging_steps = 1
+        logging.info("Debug mode enabled, setting logging steps to 1")
+        logging.getLogger().setLevel(logging.DEBUG)
+    
     fh = logging.FileHandler(os.path.join(args.output_dir, f'train_direct_{time.strftime("%Y%m%d-%H%M%S")}.log'))
     fh.setLevel(logging.DEBUG)
     
@@ -127,10 +132,6 @@ class Trainer:
         self.test_hids = \
             permuted_hids[:train_len], permuted_hids[train_len:train_len+val_len], permuted_hids[train_len+val_len:]
         
-        if args.debug:
-            self.train_hids = self.train_hids[:100]
-            self.val_hids = self.val_hids[:100]
-            self.test_hids = self.test_hids[:100]
         
         if args.rebalance:
             
@@ -247,6 +248,11 @@ class Trainer:
                 loss.backward()
                 optimizer.step()
                 running_loss += loss.item()
+                
+                # check if nan in loss
+                if torch.isnan(loss):
+                    raise ValueError("Loss is nan")
+                
                 step_now += 1
                 scheduler.step()
                 if step_now % self.args.logging_steps == 0:
