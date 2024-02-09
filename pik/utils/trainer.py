@@ -51,6 +51,7 @@ def parse_arguments():
     parser.add_argument('--direct', action='store_true', default=False, help='whether to use direct hidden states')
     parser.add_argument('--rebalance', action='store_true', default=False, help='whether to rebalance the dataset')
     parser.add_argument('--debug', action='store_true', default=False, help='set to True to enable debug mode')
+    parser.add_argument('--mlp', action='store_true', default=False, help='set to True to use MLP probe')
     parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
                     help='Model layer index(es), which layer(s) to use. None for all layers, \
                     or specify indices separated by commas (e.g., 0,2,4).')
@@ -87,6 +88,9 @@ class Trainer:
         
         self.loss_fn = torch.nn.MSELoss() if args.direct else torch.nn.BCEWithLogitsLoss()
         logging.info("Using {} loss function".format(self.loss_fn.__class__.__name__))
+        
+        self.probe_cls = MLPProbe if args.mlp else LinearProbe
+        logging.info("Using {} probe".format(self.probe_cls.__name__))
         
         # Load dataset...
         self.dataset = dataset_cls(
