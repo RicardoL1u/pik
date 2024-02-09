@@ -4,9 +4,11 @@ from pik.utils.utils import normalize_answer
 from vllm import LLM, SamplingParams
 from .hook_tool import HookMLPActivation
 import re
+import tracemalloc
 from typing import List
 from tqdm import tqdm
 import logging
+import gc
 def is_large_model(model_checkpoint):
     model_checkpoint = model_checkpoint.lower()
     try:
@@ -73,6 +75,7 @@ class Model:
             self.hook = HookMLPActivation(self.model)
             
         mlp_activations_list = []
+        tracemalloc.start()  # Start tracing memory allocation
         for i in tqdm(range(0, len(texts), batch_size), 
                       desc='Generating MLP activations',
                       total=len(texts)//batch_size,
@@ -99,8 +102,20 @@ class Model:
                 # only keep the last layer
                 mlp_activations_list.append(act_mat[:, -1, :].squeeze())
             # release memory
-            act_mat = None
+            del act_mat, output, encoded_input, self.hook.activations
             self.hook.activations = {}
+            torch.cuda.empty_cache()
+            
+            gc.collect()
+            if len(mlp_activations_list) % 10 == 0:
+                # print the memory usage of mlm_activations_list in cpu in gigabytes
+                def calculate_memory_cost(tensor_list):
+                    total_memory_bytes = sum([t.element_size() * t.nelement() for t in tensor_list])
+                    total_memory_gb = total_memory_bytes / (1024**3)  # Convert bytes to gigabytes
+                    return total_memory_gb
+                logging.info(f'mlp_activations_list memory cost: {calculate_memory_cost(mlp_activations_list)} GB')
+                
+                
         # release memory
         self.model = None
         return torch.cat(mlp_activations_list, dim=0)
