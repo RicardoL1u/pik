@@ -374,9 +374,42 @@ class Trainer:
         
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
         test_evals = df[df['split'] == 'test']['evaluation'].tolist()
+         
+        # def rescale(x):
+        #     if isinstance(x, list):
+        #         x = torch.tensor(x)
+        #     x = 1 / (1 + torch.exp(-14 * (x - 0.5)))
+        #     # x = 1 / (1 + np.exp(-14 * (x - 0.5)))
+        #     x[x > 1] = 1
+        #     x[x < 0] = 0
+        #     return x
+        # cal_train_preds = rescale(train_preds)
+        # cal_val_preds = rescale(val_preds)
+        # cal_test_preds = rescale(test_preds)
         
-        plot_calibration(test_evals, test_preds, 20,
-                         file_name=os.path.join(self.args.output_dir, 'calibration.png'))
+        
+        # logging.info("Brier Score after rescaling: train {}, val {}, test {}".\
+        #                 format(calculate_brier_score(cal_train_preds, train_evals),
+        #                        calculate_brier_score(cal_val_preds, val_evals),
+        #                        calculate_brier_score(cal_test_preds, test_evals)))
+        # logging.info("ECE after rescaling: train {}, val {}, test {}".\
+        #                 format(calculate_ECE_quantile(cal_train_preds, train_evals),
+        #                        calculate_ECE_quantile(cal_val_preds, val_evals),
+        #                        calculate_ECE_quantile(cal_test_preds, test_evals)))
+        
+        
+        # plot_calibration(test_evals, cal_test_preds, 10,
+        #                     file_name=os.path.join(self.args.output_dir, 'rescale_test_calibration.png'))
+        # plot_calibration(val_evals, cal_val_preds, 10,
+        #                     file_name=os.path.join(self.args.output_dir, 'rescale_val_calibration.png'))
+        # plot_calibration(train_evals, cal_train_preds, 10,
+        #                     file_name=os.path.join(self.args.output_dir, 'rescale_train_calibration.png'))
+        plot_calibration(test_evals, test_preds, 10,
+                         file_name=os.path.join(self.args.output_dir, 'test_calibration.png'))
+        plot_calibration(val_evals, val_preds, 10,
+                        file_name=os.path.join(self.args.output_dir, 'val_calibration.png'))
+        plot_calibration(train_evals, train_preds, 10,
+                        file_name=os.path.join(self.args.output_dir, 'train_calibration.png'))
         plot_and_save_scatter(df, self.args.output_dir)
         plot_training_loss(train_losses, self.args.logging_steps, 
                            file_name=os.path.join(self.args.output_dir, 'training_loss.png'))
@@ -384,7 +417,7 @@ class Trainer:
                      file_name=os.path.join(self.args.output_dir, 'brier_metrics.png'))
         plot_metrics(metric_list, self.args.num_epochs, 'ece',
                     file_name=os.path.join(self.args.output_dir, 'ece_metrics.png'))
-
+        
 # Main Execution
 
 if __name__ == "__main__":
