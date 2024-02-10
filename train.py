@@ -14,4 +14,4 @@ if __name__ == "__main__":
     
     trainer = Trainer(args)
 
-    training_loss, train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
+    trainer.trainning_loop()
