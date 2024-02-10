@@ -4,7 +4,7 @@ import string
 import torch
 import json
 from datasets import load_dataset as load_dataset_hf
-from typing import List
+from typing import List, Tuple
 # Prompt engineering
 PREAMBLE = ''
 import wandb
@@ -106,12 +106,12 @@ def evaluate_answer_gsm8k(model_answer:str, dataset_answer:str, exact_match=True
     else:
         raise NotImplementedError('For GSM8K, exact_match must be True')
 
-def load_dataset(dataset_name: str)->(List[dict], List[dict], callable):
+def load_dataset(dataset_name: str) -> Tuple[List[dict], List[dict], callable]:
     '''
     Loads the dataset from the given directory.
     '''
     if dataset_name == 'trivia_qa_wiki':
-        dataset = load_dataset_hf('data/trivia_qa_wiki/rc.wikipedia.nocontext', split='validation')
+        dataset = load_dataset_hf('data/trivia_qa_wiki/rc.wikipedia.nocontext', split='train')
         evaluate_answer = evaluate_answer_trivia_qa
     elif dataset_name == 'gsm8k':
         ori_dataset = [json.loads(line) for line in open('data/gsm8k/train.jsonl', 'r')]
