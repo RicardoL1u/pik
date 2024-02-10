@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from typing import List
 def plot_calibration(x_list, y_list, num_bins=10, file_name='calibration_plot.png'):
     # Zip and sort the x and y values
     xy_tuples = sorted(zip(x_list, y_list), key=lambda x: x[0])
@@ -49,7 +50,20 @@ def plot_training_loss(loss_list, logging_steps, file_name):
     # Save the plot
     plt.savefig(file_name)
 
-
+def plot_metrics(metrics:List[dict], epochs:int, metric_name:str, file_name:str):
+    # Plotting
+    plt.figure(figsize=(10, 10))
+    for split, color in zip(['train', 'val', 'test'], ['red', 'blue', 'green']):
+        split_metrics = [metric[f'{split}_{metric_name}'] for metric in metrics]
+        plt.plot([i for i in range(epochs)], split_metrics, c=color, label=split)
+    plt.xlabel('Epochs')
+    plt.ylabel(metric_name)
+    plt.title(f'{metric_name.capitalize()}')
+    plt.legend()
+    
+    # Save the plot
+    plt.savefig(file_name)
+    
 def plot_and_save_scatter(df, output_dir):
     """
     Plots and saves scatter plots of predictions vs evaluations for each split and combined.

@@ -11,8 +11,10 @@ from tqdm import tqdm
 import os
 import wandb
 import time
+from typing import Tuple
 from pik.utils.utils import wandb_log
-from pik.utils.try_to_plot import plot_calibration, plot_and_save_scatter, plot_training_loss
+from pik.utils.try_to_plot import plot_calibration, plot_and_save_scatter, plot_training_loss, plot_metrics
+from pik.utils.metrics import calculate_brier_score, calculate_ECE_quantile
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # Function Definitions
@@ -206,9 +208,7 @@ class Trainer:
         
         train_losses = []
 
-        train_metrics = []
-        val_metrics = []
-        test_metrics = []
+        metric_list = []
         
         wandb_log(logging.INFO, self.use_wandb, "===== Start Training =====")
         # log the number of epochs
@@ -267,19 +267,27 @@ class Trainer:
             
             # validate model
             all_preds, all_labels = self.prediction()
-            train_brier, val_brier, test_brier = self.calculate_metrics(all_preds, all_labels)
-            train_metrics.append(train_brier)
-            val_metrics.append(val_brier)
-            test_metrics.append(test_brier)
-            wandb_log(logging.INFO, self.use_wandb, score_dict={"epoch": epoch,
-                       "train_brier": train_brier, "val_brier": val_brier, "test_brier": test_brier},
-                      step=step_now)
+            epoch_metrics = self.calculate_metrics(all_preds, all_labels)
+            metric_list.append(epoch_metrics)
+            wandb_log(logging.INFO, 
+                      self.use_wandb, 
+                      score_dict={
+                            "epoch": epoch,
+                            "train_brier": epoch_metrics['train_brier'],
+                            "val_brier": epoch_metrics['val_brier'],
+                            "test_brier": epoch_metrics['test_brier'],
+                            "train_ece": epoch_metrics['train_ece'],
+                            "val_ece": epoch_metrics['val_ece'],
+                            "test_ece": epoch_metrics['test_ece']
+                        },
+                        step=step_now)
+            current_val_brier = epoch_metrics['val_brier']
             # save the model with the best val brier
-            if best_val_brier > val_brier:
+            if best_val_brier > current_val_brier:
                 logging.info("The previous best val brier is {}, the current val brier is {}".\
-                             format(best_val_brier, val_brier))
+                             format(best_val_brier, current_val_brier))
                 logging.info("Saving the model...")
-                best_val_brier = val_brier
+                best_val_brier = current_val_brier
                 torch.save(self.model.state_dict(), os.path.join(self.args.output_dir, 'best_model.pt'))
             
         # load the best model
@@ -287,45 +295,65 @@ class Trainer:
         self.model.load_state_dict(torch.load(os.path.join(self.args.output_dir, 'best_model.pt')))
         # test the best model
         all_preds, all_labels = self.prediction()
-        self.plot_scatters_to_wandb(all_preds, all_labels, train_losses)
+        self.plot_scatters_to_wandb(all_preds, all_labels, train_losses, metric_list)
         # Close wandb run
         if self.use_wandb:
             wandb.finish()   
-        return train_losses, train_metrics, val_metrics, test_metrics
+        return train_losses, metric_list
 
-    
-    
-    def prediction(self):
-        all_hs = self.dataset.hidden_states
+    def prediction(self)->Tuple[torch.Tensor, torch.Tensor]:
+        all_hs = self.dataset.hidden_states.to(self.args.device)
         self.model.eval()
         with torch.inference_mode():
-            all_preds = self.model(all_hs).detach().cpu().numpy().squeeze()
+            all_preds = self.model(all_hs).detach().cpu()
         all_labels = self.dataset.pik_labels
+        
+        # squeeze
+        all_labels = all_labels.squeeze()
+        all_preds = all_preds.squeeze()
+        
+        # assert the shape should be 1-dim tensor
+        assert len(all_labels.shape) == 1
+        assert len(all_preds) == len(all_labels)
+        
         return all_preds, all_labels
         
-    def calculate_metrics(self, preds, labels):
+    def calculate_metrics(self, preds:torch.Tensor, labels:torch.Tensor)->dict:
         # calculate brier score
-        # for train set
-        train_brier = np.mean((labels[self.train_hids] - preds[self.train_hids]) ** 2)
-        # for val set
-        val_brier = np.mean((labels[self.val_hids] - preds[self.val_hids]) ** 2)
-        # for test set
-        test_brier = np.mean((labels[self.test_hids] - preds[self.test_hids]) ** 2)
+        train_brier = calculate_brier_score(preds[self.train_hids], labels[self.train_hids])
+        val_brier = calculate_brier_score(preds[self.val_hids], labels[self.val_hids])
+        test_brier = calculate_brier_score(preds[self.test_hids], labels[self.test_hids])
+        
+       # calculate ECE quantile
+        train_ece = calculate_ECE_quantile(preds[self.train_hids], labels[self.train_hids])
+        val_ece = calculate_ECE_quantile(preds[self.val_hids], labels[self.val_hids])
+        test_ece = calculate_ECE_quantile(preds[self.test_hids], labels[self.test_hids])
+        
         if self.args.debug:
             # for train set
             val_brier = train_brier
-        return train_brier, val_brier, test_brier
+            val_ece = train_ece
+        return {
+            "train_brier": train_brier,
+            "val_brier": val_brier,
+            "test_brier": test_brier,
+            "train_ece": train_ece,
+            "val_ece": val_ece,
+            "test_ece": test_ece
+        }
     
-    def plot_scatters_to_wandb(self, preds, labels, train_losses):
+    def plot_scatters_to_wandb(self, preds, labels, train_losses, metric_list):
         # plot scatter
         df = pd.DataFrame({'evaluation': labels, 'prediction': preds})
         df.loc[self.test_hids, 'split'] = 'test'
         df.loc[self.train_hids, 'split'] = 'train'
         df.loc[self.val_hids, 'split'] = 'val'
 
-        train_brier, val_brier, test_brier = self.calculate_metrics(preds, labels)
-        logging.info("The train brier is {}, the val brier is {}, the test brier is {}".\
-                        format(train_brier, val_brier, test_brier))
+        metrics = self.calculate_metrics(preds, labels)
+        logging.info("Brier Score: train {}, val {}, test {}".\
+                        format(metrics['train_brier'], metrics['val_brier'], metrics['test_brier']))
+        logging.info("ECE: train {}, val {}, test {}".\
+                        format(metrics['train_ece'], metrics['val_ece'], metrics['test_ece']))
         
         # save the dataframe to local
         df.to_csv(os.path.join(self.args.output_dir, 'scatters.csv'), index=False)
@@ -352,6 +380,10 @@ class Trainer:
         plot_and_save_scatter(df, self.args.output_dir)
         plot_training_loss(train_losses, self.args.logging_steps, 
                            file_name=os.path.join(self.args.output_dir, 'training_loss.png'))
+        plot_metrics(metric_list, self.args.num_epochs, 'brier', 
+                     file_name=os.path.join(self.args.output_dir, 'brier_metrics.png'))
+        plot_metrics(metric_list, self.args.num_epochs, 'ece',
+                    file_name=os.path.join(self.args.output_dir, 'ece_metrics.png'))
 
 # Main Execution
 
@@ -367,5 +399,5 @@ if __name__ == "__main__":
     
     trainer = Trainer(args)
 
-    training_loss, train_metrics, val_metrics, test_metrics = trainer.trainning_loop()
-    
+    training_loss, metrics = trainer.trainning_loop()
+
