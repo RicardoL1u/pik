@@ -26,12 +26,12 @@ def plot_calibration(x_list, y_list, num_bins=10, file_name='calibration_plot.pn
     plt.figure(figsize=(10, 10))
     plt.scatter(x_means, y_means, s=100, c='red', marker='o', label='bins')
     plt.plot(x_means, y_means, c='red', label='line')
-    plt.plot([min(x_list), max(x_list)], [min(x_list), max(x_list)], color='blue', linestyle='--')
+    plt.plot([0, 1], [0, 1], color='black', linestyle='--')
 
     plt.xlim(0, 1)
     plt.ylim(0, 1)
-    plt.xlabel('Evaluation')
-    plt.ylabel('Prediction')
+    plt.xlabel('Confidence')
+    plt.ylabel('Frequency')
     plt.title('Calibration Plot')
     plt.legend()
     
@@ -99,12 +99,12 @@ def plot_and_save_scatter(df, output_dir):
     fig, ax = plt.subplots(figsize=(10, 10))
     for split, color in zip(['train', 'val', 'test'], ['red', 'blue', 'green']):
         split_df = df[df['split'] == split]
-        plt.scatter(split_df['evaluation'], split_df['prediction'], s=100, c=color, marker='o', label=split)
+        plt.scatter(split_df['prediction'], split_df['evaluation'], s=100, c=color, marker='o', label=split)
     plt.plot([0, 1], [0, 1], color='black', linestyle='--')
     plt.xlim(0, 1)
     plt.ylim(0, 1)
-    plt.xlabel('Evaluation')
-    plt.ylabel('Prediction')
+    plt.xlabel('Confidence')
+    plt.ylabel('Frequency')
     plt.title('Combined Scatter Plot')
     plt.legend()
     plt.savefig(os.path.join(output_dir, 'scatter_combined.png'))
