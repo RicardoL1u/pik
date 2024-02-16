@@ -93,7 +93,7 @@ class Trainer:
         dataset_cls = DirectHiddenStatesDataset if args.direct else HiddenStatesDataset
         logging.info("Using {} dataset".format(dataset_cls.__name__))
         
-        self.loss_fn = torch.nn.MSELoss() if args.direct else torch.nn.BCEWithLogitsLoss()
+        self.loss_fn = torch.nn.L1Loss() if args.direct else torch.nn.BCEWithLogitsLoss()
         logging.info("Using {} loss function".format(self.loss_fn.__class__.__name__))
         
         self.probe_cls = MLPProbe if args.mlp else LinearProbe
@@ -417,7 +417,7 @@ class Trainer:
                      file_name=os.path.join(self.args.output_dir, 'brier_metrics.png'))
         plot_metrics(metric_list, self.args.num_epochs, 'ece',
                     file_name=os.path.join(self.args.output_dir, 'ece_metrics.png'))
-        
+
 # Main Execution
 
 if __name__ == "__main__":
