@@ -1,11 +1,12 @@
 from pik.datasets.direct_hidden_states_dataset import DirectHiddenStatesDataset
-from pik.models.probe_model import LinearProbe
+from pik.models.probe_model import LinearProbe, MLPProbe
 import argparse
 import logging
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from pik.utils.try_to_plot import plot_calibration
+from pik.utils.metrics import calculate_brier_score, calculate_ECE_quantile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 def parse_arguments():
@@ -26,6 +27,7 @@ def parse_arguments():
     parser.add_argument('--model_layer_idx', default=None, type=parse_layers,
                     help='Model layer index(es), which layer(s) to use. None for all layers, \
                     or specify indices separated by commas (e.g., 0,2,4).')
+    parser.add_argument('--mlp', action='store_true', help='Use MLP probe instead of linear probe.')
     args = parser.parse_args()
     return args
 
@@ -63,35 +65,31 @@ if __name__ == '__main__':
         device = args.device,
         rebalance=False
     )
-    model = LinearProbe(dims=dataset.hidden_states.shape[1]).to(args.device)
+    
+    probe_cls = MLPProbe if args.mlp else LinearProbe
+    logging.info("Use {} probe".format('MLP' if args.mlp else 'linear'))
+    model = probe_cls(dims=dataset.hidden_states.shape[1]).to(args.device)
     logging.info("Loading model checkpoint from {}".format(args.model_ckpt_path))
-    try:
-        model.load_state_dict(torch.load(args.model_ckpt_path))
-    except:
-        logging.info("Loading model checkpoint from {} failed, \
-                     trying to convert the keys".format(args.model_ckpt_path))
-        # convert the keys to from ln.weight to model.0.weight and ln.bias to model.0.bias
-        ckpt_dict = torch.load(args.model_ckpt_path)
-        new_ckpt_dict = {}
-        for k, v in ckpt_dict.items():
-            new_ckpt_dict['model.0.'+k.replace('ln.','')] = v
-        model.load_state_dict(new_ckpt_dict)
+    model.load_state_dict(torch.load(args.model_ckpt_path))
     # evaluate
     model.eval()
     with torch.no_grad():
-        preds = model(dataset.hidden_states).detach().cpu().numpy().squeeze()
-    labels = dataset.pik_labels
+        preds: torch.Tensor = model(dataset.hidden_states).detach().cpu().squeeze()
+    labels:torch.Tensor = dataset.pik_labels
+    
+    logging.info("Mean prediction: {}, Mean label: {}".format(preds.mean(), labels.mean()))
     
     # calculate brier score
-    brier_score = np.mean((preds - labels)**2)
-    logging.info("Brier score: {}".format(brier_score))    
+    brier_score = calculate_brier_score(preds, labels)
+    ece = calculate_ECE_quantile(preds, labels, bins=10)
+    logging.info("Brier score: {}, ECE: {}".format(brier_score, ece))
     
     # plt the scatter plot
     figure_path = args.model_ckpt_path.replace('.pt', args.dataset+'_scatter.png')
     plt.figure(figsize=(8,8))
     plt.scatter(preds, labels, alpha=0.5)
-    plt.xlabel('pik labels')
-    plt.ylabel('predictions')
+    plt.xlabel('Confidence')
+    plt.ylabel('Frequency')
     plt.xlim(0,1)
     plt.ylim(0,1)
     plt.savefig(figure_path)
