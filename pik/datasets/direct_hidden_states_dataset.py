@@ -13,7 +13,7 @@ class DirectHiddenStatesDataset(Dataset):
     '''
     def __init__(self,
                  hs_file='hidden_states.pt',
-                 tg_file='text_generations.csv',
+                 tg_file='text_generations.json',
                  precision=torch.float16,
                  layer_idx: Optional[Union[int, List[int]]] = None,  
                  rebalance: bool = False,
@@ -41,12 +41,16 @@ class DirectHiddenStatesDataset(Dataset):
         self.text_generations: list = json.load(open(tg_file, 'r'))
 
             
-        # only keeps the text_generation and hidden_states that
-        # answer_type == 'WikipediaEntity'
         keep_idx_list = []
-        for i, sample in enumerate(self.text_generations):
-            if sample['answer']['type'] == 'WikipediaEntity':
-                keep_idx_list.append(i)
+        if 'trivia_qa' in tg_file:
+            # only keeps the text_generation and hidden_states that
+            # answer_type == 'WikipediaEntity'
+            for i, sample in enumerate(self.text_generations):
+                if sample['answer']['type'] == 'WikipediaEntity':
+                    keep_idx_list.append(i)
+        else:
+            # keep all
+            keep_idx_list = list(range(len(self.text_generations)))
         
         # remove samples that are not WikipediaEntity
         self.text_generations = [self.text_generations[i] for i in keep_idx_list]
