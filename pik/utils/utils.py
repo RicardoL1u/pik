@@ -43,12 +43,12 @@ def build_few_shot(examples:List[dict], template:str, example_num=0):
     prompt = '\n'.join(example_list)
     return prompt
 
-def prompt_eng(question:str, examples:List[dict], template:str, example_num=0):
+def prompt_eng_for_freeqa(sample:dict, examples:List[dict], template:str, example_num=0):
     '''
     Returns an x-shot prompt for the given question.
-    If `n` is higher than 0, `dataset` must be provided.
     '''
     
+    question = sample['question']
     # template would be like 'Question: {question}\nAnswer: {answer}'
     # or 'Question: {question}\nRationale: {rationale}\nAnswer: {answer}'
     # we need to find the second space in the template
@@ -56,6 +56,22 @@ def prompt_eng(question:str, examples:List[dict], template:str, example_num=0):
     # only keep the "Question: {question}\nAnswer|Rationale: "
     postamble = template[:position_of_second_space] + ' '
     return PREAMBLE + build_few_shot(examples, template, example_num) + '\n' + postamble.format(question=question)
+
+def prompt_eng_for_mcq(sample:dict, examples:List[dict], template:str, example_num=0):
+    
+    # TODO: NOW, the examples is not used
+    # TODO: NOW, the choice number must be 5
+    question = sample['question']
+    choices = sample['choices']['text']
+    return PREAMBLE + build_few_shot(examples, template, 0) + '\n' + template.format(**{
+        'test_question': question,
+        'option_1': choices[0],
+        'option_2': choices[1],
+        'option_3': choices[2],
+        'option_4': choices[3],
+        'option_5': choices[4]
+    })
+
 
 def normalize_answer(s):
     '''
@@ -106,6 +122,39 @@ def evaluate_answer_gsm8k(model_answer:str, dataset_answer:str, exact_match=True
     else:
         raise NotImplementedError('For GSM8K, exact_match must be True')
 
+def evaluate_answer_mcq_cmqa(model_answer:str, dataset_answer:dict, exact_match=False):
+    # the dataset_answer is like 
+    # {
+    #   "choices": {
+    #       "label": ["A", "B", "C", "D", "E"],
+    #       "text": ["bloody mess", "pleasure", "being imprisoned", "feeling of guilt", "cake"]
+    #   },
+    #   "answerKey": "A"
+    # }
+    
+    # First we need to convert answerKey to the index of the choice
+    answer_idx = dataset_answer['choices']['label'].index(dataset_answer['answerKey'])
+    # idx starts from 0, while the answer starts from 1
+    answer_text = dataset_answer['choices']['text'][answer_idx]
+    answer_idx += 1
+    other_choices = list(set(range(1, 6)) - set([answer_idx]))
+    
+    if exact_match:
+        raise NotImplementedError('For MCQ_CMQA, exact_match must be False')
+    else:
+        # Then we need to check if the answer_idx is in the model_answer
+        # Meanwhile, other choices should not be in the model_answer
+        if str(answer_idx) in model_answer and not any([str(idx) in model_answer for idx in other_choices]):
+            return True
+        else:
+            # check if the answer_text is in the model_answer
+            if answer_text.lower() in model_answer.lower():
+                return True
+            else:
+                return False
+        
+
+
 def load_dataset(dataset_name: str) -> Tuple[List[dict], List[dict], callable]:
     '''
     Loads the dataset from the given directory.
@@ -113,6 +162,9 @@ def load_dataset(dataset_name: str) -> Tuple[List[dict], List[dict], callable]:
     if dataset_name == 'trivia_qa_wiki':
         dataset = load_dataset_hf('data/trivia_qa_wiki/rc.wikipedia.nocontext', split='train')
         evaluate_answer = evaluate_answer_trivia_qa
+    if dataset_name == 'commonsense_qa':
+        dataset = load_dataset_hf('data/commonsense_qa', split='train')
+        evaluate_answer = evaluate_answer_mcq_cmqa
     elif dataset_name == 'gsm8k':
         ori_dataset = [json.loads(line) for line in open('data/gsm8k/train.jsonl', 'r')]
         ori_dataset.extend([json.loads(line) for line in open('data/gsm8k/test.jsonl', 'r')])
@@ -145,5 +197,8 @@ def load_template(template_type:str):
         return 'Question: {question}\nAnswer: {answer}'
     elif template_type.lower().strip() == 'cot':
         return 'Question: {question}\nRationale: {rationale}\nAnswer: {answer}'
+    # multiple choice question for commonsense_qa
+    elif template_type.lower().strip() == 'mcq_cmqa':
+        return open('data/commonsense_qa/data/template.txt', 'r').read()
     else:
         raise NotImplementedError(f'Unknown template: {template_type}')

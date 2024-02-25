@@ -18,7 +18,7 @@ def parse_arguments():
         except ValueError:
             raise argparse.ArgumentTypeError("Value must be 'None' or a comma-separated list of integers")
     parser = argparse.ArgumentParser(description='Evaluate a linear probe on a dataset.')
-    parser.add_argument('--dataset', required=True, choices=['gsm8k','trivia_qa'], help='dataset name')
+    parser.add_argument('--dataset', required=True, choices=['gsm8k','trivia_qa','commonsense_qa'], help='dataset to use')
     parser.add_argument('--model_ckpt_path', required=True, help='path to model checkpoint')
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')

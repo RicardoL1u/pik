@@ -8,11 +8,13 @@ import torch
 from tqdm import tqdm
 from pik.models.model import Model
 from pik.utils.utils import (
-    prompt_eng,
+    prompt_eng_for_freeqa,
+    prompt_eng_for_mcq,
     load_dataset,
     load_template,
     load_example,
 )
+from pik.utils.special_cases import check_special_cases
 from typing import List
 import logging
 import os
@@ -72,6 +74,7 @@ def evaluate_model_answers(dataset, output_text_list, evaluate_answer:callable):
     for idx, model_answers in tqdm(enumerate(output_text_list), 
                                    desc='Evaluating Answers', 
                                    total=len(output_text_list)):
+        
         question, correct_answer = dataset[idx]['question'], dataset[idx]['answer']
         results.append({
             'qid': idx,
@@ -106,11 +109,11 @@ def parse_arguments():
                          help='set to True to enable debug mode')
     parser.add_argument('--mlp', action='store_true', default=False,
                          help='set to True to use MLP activation hook')
-    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa_wiki', 'gsm8k'],
+    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa_wiki', 'gsm8k', 'commonsense_qa'],
                             help='dataset to use')
     parser.add_argument('--example_file', default='data/trivia_qa/trivia_qa_examples.json',
                             help='example file to use')
-    parser.add_argument('--template', default='icl', choices=['icl', 'cot'],
+    parser.add_argument('--template', default='icl', choices=['icl', 'cot', 'mcq_cmqa'],
                             help='template to use')
     parser.add_argument('--shot', type=int, default=4,
                          help='number of examples per question')
@@ -122,6 +125,10 @@ if __name__ == "__main__":
         format="[generate:%(filename)s:L%(lineno)d] %(levelname)-6s %(message)s",
         level=logging.INFO if not args.debug else logging.DEBUG
     )
+    
+    # Checks Special Cases
+    check_special_cases(args)
+    
     # Load data
     try:
         dataset, evaluate_answer = load_dataset(args.dataset)
@@ -135,12 +142,33 @@ if __name__ == "__main__":
         logging.error(f"Data file not found: {e}")
         exit(1)
 
-    # Generate hidden states
-    text_inputs = [prompt_eng(data['question'], examples, template, args.shot) 
-                   for data in dataset]
 
+    # Prepare for evaluation
+    if args.dataset == 'commonsense_qa':
+        logging.info('Preparing for evaluation of commonsense_qa')
+        new_dataset = []
+        for data in dataset:
+            new_data = data.copy()  # Create a copy of the original dictionary
+            new_data['answer'] = {
+                "choices": data["choices"],
+                "answerKey": data["answerKey"]
+            }
+            new_dataset.append(new_data)
+
+        dataset = new_dataset
+            
+    assert 'answer' in dataset[0], 'Dataset must have "answer" field'
+    
+    prompt_eng = prompt_eng_for_mcq if args.template == 'mcq_cmqa' else prompt_eng_for_freeqa
+    
+
+    text_inputs = [prompt_eng(sample, examples, template, args.shot) 
+                   for sample in dataset]
+
+
+    
     if args.debug:
-        text_inputs = text_inputs[:100]
+        text_inputs = text_inputs[:1000]
         for idx, text in enumerate(text_inputs):
             logging.debug('Idx %s Example of text_inputs:\n=======\n%s\n======', idx, text)
         args.hidden_states_filename = args.hidden_states_filename.replace('.pt', '_debug.pt')
@@ -149,6 +177,7 @@ if __name__ == "__main__":
     # Initialize model
     model = setup_model(args) 
         
+    # Generate hidden states   
     if not os.path.exists(args.hidden_states_filename):
         
         logging.info('Generating hidden states for %d questions', len(text_inputs))
