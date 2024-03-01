@@ -52,19 +52,18 @@ def setup_model(args):
 #     return hidden_states
 
 def get_hidden_states(model:Model, text_inputs, args):
-    if args.mlp:
-        full_hidden_states = []
-        for batch_texts in tqdm(range(0, len(text_inputs), 32*100), 
-                                desc='Generating hidden states',
-                                total=len(text_inputs)//(32*100),
-                                ncols=100):
-            batch_texts = text_inputs[batch_texts:batch_texts+32*100]
+    full_hidden_states = []
+    for batch_texts in tqdm(range(0, len(text_inputs), 32*10), 
+                            desc='Generating hidden states',
+                            total=len(text_inputs)//(32*10),
+                            ncols=100):
+        batch_texts = text_inputs[batch_texts:batch_texts+32*10]
+        if args.mlp:
             batch_hidden_states = model.get_batch_MLP_activations(batch_texts, keep_all=args.keep_all_hidden_layers)
-            full_hidden_states.append(batch_hidden_states)
-        return torch.cat(full_hidden_states, dim=0)
-    else:
-        return model.get_batch_hidden_states(text_inputs,
-                                         keep_all=args.keep_all_hidden_layers)
+        else:
+            batch_hidden_states = model.get_batch_hidden_states(batch_texts, keep_all=args.keep_all_hidden_layers)
+        full_hidden_states.append(batch_hidden_states)
+    return torch.cat(full_hidden_states, dim=0)
 
 def generate_answers(model:Model, text_inputs:List[str]):
     return model.get_batch_text_generation(text_inputs)
@@ -109,11 +108,11 @@ def parse_arguments():
                          help='set to True to enable debug mode')
     parser.add_argument('--mlp', action='store_true', default=False,
                          help='set to True to use MLP activation hook')
-    parser.add_argument('--dataset', default='trivia_qa', choices=['trivia_qa_wiki', 'gsm8k', 'commonsense_qa'],
+    parser.add_argument('--dataset', default='trivia_qa',
                             help='dataset to use')
     parser.add_argument('--example_file', default='data/trivia_qa/trivia_qa_examples.json',
                             help='example file to use')
-    parser.add_argument('--template', default='icl', choices=['icl', 'cot', 'mcq_cmqa'],
+    parser.add_argument('--template', default='icl',
                             help='template to use')
     parser.add_argument('--shot', type=int, default=4,
                          help='number of examples per question')
