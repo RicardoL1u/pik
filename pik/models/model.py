@@ -52,7 +52,7 @@ class Model:
             temperature=generation_options.get('temperature', 1),
             top_k=generation_options.get('top_k', 50),
             top_p=generation_options.get('top_p', 1),
-            stop=['Question']
+            stop=['Question','Q:']
             # pad_token_id=generation_options.get('pad_token_id', 50256),
             # eos_token_id=generation_options.get('eos_token_id', 198),
         )
@@ -121,7 +121,7 @@ class Model:
         return torch.cat(mlp_activations_list, dim=0)
             
             
-    def get_batch_hidden_states(self, texts, batch_size=16, keep_all=True):
+    def get_batch_hidden_states(self, texts, batch_size=4, keep_all=True):
         # Method to process texts in batches
         if self.model is None:
             self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
@@ -129,7 +129,7 @@ class Model:
         hidden_states_list = []
         # for i in range(0, len(texts), batch_size):
         for i in tqdm(range(0, len(texts), batch_size), 
-                      desc='Generating hidden states',
+                      desc='Generating batch hidden states',
                       total=len(texts)//batch_size,
                       ncols=100):
             batch_texts = texts[i:i+batch_size]
@@ -141,6 +141,9 @@ class Model:
             with torch.no_grad():  # Reduces memory usage
                 output = self.model(**encoded_input, output_hidden_states=True)
 
+            # move output.hidden_states to cpu
+            output.hidden_states = [layer.cpu() for layer in output.hidden_states]
+            
             logging.debug(f'layers: {len(output.hidden_states)}')
             logging.debug(f'shape of output.hidden_states: {output.hidden_states[-1].shape}')
             
