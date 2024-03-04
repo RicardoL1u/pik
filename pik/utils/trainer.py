@@ -36,6 +36,7 @@ def parse_arguments():
             raise argparse.ArgumentTypeError("Value must be 'None' or a comma-separated list of integers")
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_frac', type=float, default=0.8, help='fraction of hidden states to use for training')
+    parser.add_argument('--val_frac', type=float, default=0.1, help='fraction of hidden states to use for validation')
     parser.add_argument('--num_epochs', type=int, default=100, help='number of epochs to train for')
     parser.add_argument('--batch_size', type=int, default=25, help='batch size')
     parser.add_argument('--learning_rate', type=float, default=1e-3, help='learning rate')
@@ -127,8 +128,8 @@ class Trainer:
         train_len = int(args.train_frac * self.dataset.hidden_states.shape[0])
         
         # the rest hidden states are used for testing and validation
-        val_len = int((1 - args.train_frac) * self.dataset.hidden_states.shape[0]) // 2
-        test_len = int((1 - args.train_frac) * self.dataset.hidden_states.shape[0]) - val_len
+        val_len = int(args.val_frac * self.dataset.hidden_states.shape[0])
+        test_len = self.dataset.hidden_states.shape[0] - train_len - val_len
         self.train_hids, \
         self.val_hids, \
         self.test_hids = \
