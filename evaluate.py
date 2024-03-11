@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pik.utils.try_to_plot import plot_calibration
 from pik.utils.metrics import calculate_brier_score, calculate_ECE_quantile
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 def parse_arguments():
@@ -18,7 +19,7 @@ def parse_arguments():
         except ValueError:
             raise argparse.ArgumentTypeError("Value must be 'None' or a comma-separated list of integers")
     parser = argparse.ArgumentParser(description='Evaluate a linear probe on a dataset.')
-    parser.add_argument('--dataset', required=True, choices=['gsm8k','trivia_qa','commonsense_qa'], help='dataset to use')
+    parser.add_argument('--dataset', required=True, choices=['gsm8k','trivia_qa_wiki','commonsense_qa','bbh'], help='dataset to use')
     parser.add_argument('--model_ckpt_path', required=True, help='path to model checkpoint')
     parser.add_argument('--hidden_states_filename', default='hidden_states.pt', help='filename for saving hidden states')
     parser.add_argument('--text_generations_filename', default='text_generations.csv', help='filename for saving text generations')
@@ -61,7 +62,7 @@ if __name__ == '__main__':
         hs_file = args.hidden_states_filename, 
         tg_file = args.text_generations_filename,
         layer_idx = args.model_layer_idx,
-        precision=precision,
+        precision = precision,
         device = args.device,
         rebalance=False
     )
@@ -75,6 +76,10 @@ if __name__ == '__main__':
     model.eval()
     with torch.no_grad():
         preds: torch.Tensor = model(dataset.hidden_states).detach().cpu().squeeze()
+    
+    # for preds < 0 or preds > 1, set them to 0 and 1
+    preds = torch.clamp(preds, 0, 1)    
+    
     labels:torch.Tensor = dataset.pik_labels
     
     logging.info("Mean prediction: {}, Mean label: {}".format(preds.mean(), labels.mean()))
@@ -85,7 +90,7 @@ if __name__ == '__main__':
     logging.info("Brier score: {}, ECE: {}".format(brier_score, ece))
     
     # plt the scatter plot
-    figure_path = args.model_ckpt_path.replace('.pt', args.dataset+'_scatter.png')
+    figure_path = args.model_ckpt_path.replace('.pt', '_' + args.dataset+'_scatter.png')
     plt.figure(figsize=(8,8))
     plt.scatter(preds, labels, alpha=0.5)
     plt.xlabel('Confidence')
@@ -95,3 +100,16 @@ if __name__ == '__main__':
     plt.savefig(figure_path)
     
     plot_calibration(preds, labels, num_bins=10, file_name=figure_path.replace('.png', '_calibration.png'))
+    
+    task_type_list = [sample['task'] for sample in dataset.text_generations]
+    evaluation_list = [sample['evaluation'] for sample in dataset.text_generations]
+    # save the preds and labels to a csv file
+    # with header as: task, confidence, consistency, evaluation
+    df = pd.DataFrame({
+            'task': task_type_list,
+            'confidence': preds.numpy(),
+            'consistency': labels.numpy(),
+            'evaluation': evaluation_list
+        }
+    )
+    df.to_csv(figure_path.replace('.png', '.csv'), index=False)
