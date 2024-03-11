@@ -345,7 +345,7 @@ class Trainer:
     
     def plot_scatters_to_wandb(self, preds, labels, train_losses, metric_list):
         # plot scatter
-        df = pd.DataFrame({'evaluation': labels, 'prediction': preds})
+        df = pd.DataFrame({'consistency': labels, 'prediction': preds})
         df.loc[self.test_hids, 'split'] = 'test'
         df.loc[self.train_hids, 'split'] = 'train'
         df.loc[self.val_hids, 'split'] = 'val'
@@ -360,21 +360,21 @@ class Trainer:
         df.to_csv(os.path.join(self.args.output_dir, 'scatters.csv'), index=False)
         if self.use_wandb:
             wandb.log({"train scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'train']),
-                                                    "evaluation", "prediction", title="Train Scatter")})
+                                                    "consistency", "prediction", title="Train Scatter")})
             wandb.log({"val scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'val']),
-                                                    "evaluation", "prediction", title="Val Scatter")})
+                                                    "consistency", "prediction", title="Val Scatter")})
             wandb.log({"test scatter": wandb.plot.scatter(wandb.Table(data=df[df['split'] == 'test']), 
-                                                    "evaluation", "prediction", title="Test Scatter")})
+                                                    "consistency", "prediction", title="Test Scatter")})
 
-        # get prediction and evaluation for each split
+        # get prediction and consistency for each split
         train_preds = df[df['split'] == 'train']['prediction'].tolist()
-        train_evals = df[df['split'] == 'train']['evaluation'].tolist()
+        train_evals = df[df['split'] == 'train']['consistency'].tolist()
         
         val_preds = df[df['split'] == 'val']['prediction'].tolist()
-        val_evals = df[df['split'] == 'val']['evaluation'].tolist()
+        val_evals = df[df['split'] == 'val']['consistency'].tolist()
         
         test_preds = df[df['split'] == 'test']['prediction'].tolist()
-        test_evals = df[df['split'] == 'test']['evaluation'].tolist()
+        test_evals = df[df['split'] == 'test']['consistency'].tolist()
          
         # def rescale(x):
         #     if isinstance(x, list):

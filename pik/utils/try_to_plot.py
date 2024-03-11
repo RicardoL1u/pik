@@ -66,7 +66,7 @@ def plot_metrics(metrics:List[dict], epochs:int, metric_name:str, file_name:str)
     
 def plot_and_save_scatter(df, output_dir):
     """
-    Plots and saves scatter plots of predictions vs evaluations for each split and combined.
+    Plots and saves scatter plots of predictions vs consistencys for each split and combined.
 
     Args:
     df (DataFrame): The DataFrame containing the data.
@@ -79,11 +79,11 @@ def plot_and_save_scatter(df, output_dir):
     # Function to plot individual scatter plot for each split
     def plot_split(df_split, color, label, file_suffix):
         fig, ax = plt.subplots(figsize=(10, 10))
-        plt.scatter(df_split['evaluation'], df_split['prediction'], s=2, c=color, marker='o', label=label)
+        plt.scatter(df_split['consistency'], df_split['prediction'], s=2, c=color, marker='o', label=label)
         plt.plot([0, 1], [0, 1], color='black', linestyle='--')
         plt.xlim(0, 1)
         plt.ylim(0, 1)
-        plt.xlabel('Evaluation')
+        plt.xlabel('consistency')
         plt.ylabel('Prediction')
         plt.title(f'Scatter Plot - {label.capitalize()}')
         plt.legend()
@@ -99,7 +99,7 @@ def plot_and_save_scatter(df, output_dir):
     fig, ax = plt.subplots(figsize=(10, 10))
     for split, color in zip(['train', 'val', 'test'], ['red', 'blue', 'green']):
         split_df = df[df['split'] == split]
-        plt.scatter(split_df['prediction'], split_df['evaluation'], s=100, c=color, marker='o', label=split)
+        plt.scatter(split_df['prediction'], split_df['consistency'], s=100, c=color, marker='o', label=split)
     plt.plot([0, 1], [0, 1], color='black', linestyle='--')
     plt.xlim(0, 1)
     plt.ylim(0, 1)
@@ -113,7 +113,7 @@ def plot_and_save_scatter(df, output_dir):
 if __name__ == '__main__':
     df = pd.read_csv('scatter.csv')
     df_test = df[df['split'] == 'test']
-    eval_test = df_test['evaluation'].tolist()
+    eval_test = df_test['consistency'].tolist()
     pred_test = df_test['prediction'].tolist()
 
     plot_calibration(eval_test, pred_test, 10)

@@ -22,6 +22,7 @@ class DirectHiddenStatesDataset(Dataset):
         self.layer_idx = layer_idx
         self.device = device
         hs = torch.load(hs_file, map_location='cpu').type(precision)
+        logging.info('hs.shape={}'.format(hs.shape))
         assert hs.dim() in (2, 3)
 
         if self.layer_idx is None:
@@ -59,7 +60,7 @@ class DirectHiddenStatesDataset(Dataset):
         
         
         # Create pik_labels using a vectorized operation
-        self.pik_labels = np.array([sample['evaluation'] for sample in self.text_generations])
+        self.pik_labels = np.array([sample['consistency'] for sample in self.text_generations])
         # convert to torch tensor
         self.pik_labels = torch.from_numpy(self.pik_labels).type(precision)
         
