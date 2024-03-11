@@ -1103,6 +1103,7 @@ def transform_to_bbh_adjective_order(origin):
     }
     return bbh
 
+# Task: Hyperbaton
 # origin: {
     #   "_id": "custom_m_1",
     #   "input": "After meeting with the producers, Sam went to his office.",
