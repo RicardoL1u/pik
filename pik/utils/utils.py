@@ -201,7 +201,7 @@ def load_dataset(dataset_name: str) -> Tuple[List[dict], List[dict], callable]:
         # cot_prompt_files = glob.glob('data/bbh/cot_prompts/*.txt')
         dataset = []
         for task_file in task_files:
-            cot_prompt = open('data/bbh/cot-prompts/' + task_file.split('/')[-1].split('.')[0] + '.txt', 'r').read().strip()
+            cot_prompt = open('data/bbh/cot-prompts-1-shot/' + task_file.split('/')[-1].split('.')[0] + '.txt', 'r').read().strip()
             # since BBH is a set of tasks, the cot_prompt varies for each task
             # we load the cot_prompt for each task at here, rather than in the prompt_eng
             
