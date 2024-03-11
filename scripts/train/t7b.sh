@@ -1,6 +1,6 @@
 export CUDA_VISIBLE_DEVICES=0
-model="Mistral-7B-Instruct-v0.2"
-num_epochs=16
+model="Mistral-7B-v0.1"
+num_epochs=10
 batch_size=256
 learning_rate=1e-5
 warmup_ratio=0.1
@@ -13,7 +13,6 @@ probe_model=mlp
 dataset="trivia_qa_wiki"
 debug=false
 
-
 echo "Output directory: $output_dir"
 
 # Add --rebalance flag conditionally based on rebalance variable
@@ -23,9 +22,13 @@ if [ "$rebalance" = "true" ]; then
 fi
 echo "Rebalance flag: $rebalance_flag"
 
-wandb_run_name=adam-probe-100-$probe_model-$train_var-$train_type-re$rebalance-layer-$model_layer_idx-ep$num_epochs-bsz$batch_size-lr$learning_rate-wr$warmup_ratio
+# Generate a timestamp in the format YYYYMMDDHHMMSS
+current_time=$(date "+%Y-%m-%d:%H-%M-%S")
+
+wandb_run_name=L1-adam-probe-100-$current_time-$probe_model-$train_var-$train_type-re$rebalance-layer-$model_layer_idx-ep$num_epochs-bsz$batch_size-lr$learning_rate-wr$warmup_ratio
 output_dir=data/$dataset/results/$model/$wandb_run_name
 mkdir -p $output_dir
+
 
 
 train_type_flag=""
