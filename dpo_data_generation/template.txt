@@ -1,0 +1,19 @@
+Question: {input}
+Answer: {target}
+---
+Please provide four distinct rationales to the above question. Each rationale should differ significantly from the others. 
+One rationale should be detailed and thorough, 
+another brief and to the point, 
+the third should reflect a professional viewpoint, 
+and the fourth should be accessible to beginners. 
+Despite the differences in approach, all rationales should ultimately support the same correct answer: {target}
+
+finally please output in the following format:
+```json
+{{
+    "meticulous": "detailed and thorough",
+    "succinct": "brief and to the point",
+    "profession": "professional viewpoint",
+    "rookie-friendly": "accessible to beginners"
+}}
+```
