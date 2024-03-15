@@ -22,9 +22,24 @@ def gpt4(messages):
 import requests
 
 def chat_completion_use_cache(prompt,
-                              model='gpt-3.5-turbo',
-                              temperature=0.7
-                              ):
+                              model = 'gpt-3.5-turbo',
+                              temperature = 0.7,
+                              n = 1):
+    try:
+        response = send_request_to_openai(prompt, model, temperature, n)
+        if n == 1:
+            return response.json()['choices'][0]['message']['content']
+        else:
+            return [r['message']['content'] for r in response.json()['choices']]
+    except Exception as e:
+        print(e)
+        return None
+
+
+def send_request_to_openai(prompt,
+                           model='gpt-3.5-turbo',
+                           temperature=0.7,
+                           n = 1):
     url = 'http://103.238.162.37:9072/chat_completion/use_cache'
     headers = {'Content-Type': 'application/json'}
     data = {
@@ -34,16 +49,13 @@ def chat_completion_use_cache(prompt,
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": prompt},
         ],
+        'n' : n,
         'temperature': temperature
     }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        return response.json()['choices'][0]['message']['content']
-    except Exception as e:
-        print(e)
-        return None
-
+    return requests.post(url, headers=headers, json=data)
 
 if __name__ == '__main__':
-    response = gpt4([{"role": "user", "content": message}])
-    print(chat_completion_use_cache(message))
+    # response = gpt4([{"role": "user", "content": message}])
+    # print(chat_completion_use_cache(message))
+    prompt = "Hello World"
+    
