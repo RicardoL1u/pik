@@ -91,13 +91,19 @@ for file in rationale_files:
             print("After postprocess, Data with rationale: ", json.dumps(data, indent=4))
             
             
-    dpo_dataset = [data for data in og_dataset if 'rationale' in data]
+    dpo_dataset = [data for data in og_dataset if 'rationale' in data.keys()]
     print(f"Total data: {len(og_dataset)}, Data with rationale: {len(dpo_dataset)}")
+    assert all('rationale' in data for data in dpo_dataset), "Rationale is missing in some data"
     
-    # save the file           
-    with open(file.replace('_result.json', '_rationale.json').replace('bbh-new', 'bbh_dpo'), 'w') as f:
-        json.dump(og_dataset, f, indent=4, ensure_ascii=False)
+    # save the file
+    dpo_dataset_path = file.replace('_result.json', '_rationale.json').replace('bbh-new', 'bbh_dpo')           
+    with open(dpo_dataset_path, 'w') as f:
+        json.dump(dpo_dataset, f, indent=4, ensure_ascii=False)
         
+    # open the dumped file and check if the data is saved correctly
+    # dpo_dataset = json.load(open(dpo_dataset_path))
+    # assert all('rationale' in data for data in dpo_dataset), "Rationale is missing in some data"
+    
 # print error file count
 print("Error file count: ")
 for file, error_cnt in error_file_count.items():
