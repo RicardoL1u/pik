@@ -45,7 +45,7 @@ class Model:
     Loads a language model from HuggingFace.
     Implements methods to extract the hidden states and generate text from a given input.
     '''
-    def __init__(self, model_checkpoint ,generation_options):
+    def __init__(self, model_checkpoint ,generation_options, is_low_memory=True):
         self.sampling_params = SamplingParams(
             n=generation_options.get('n', 1),
             max_tokens=generation_options.get('max_new_tokens', 16),
@@ -63,6 +63,7 @@ class Model:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
+        self.is_low_memory = is_low_memory
         # Load model when needed
         self.model_checkpoint = model_checkpoint
         self.model = None
@@ -216,7 +217,9 @@ class Model:
                 [normalize_answer(output_text) for output_text in output_text_list]
                 for output_text_list in output_text_list
             ]
-        self.vllm_model = None
+        if self.is_low_memory:
+            # release memory
+            self.vllm_model = None
         return output_text_list
     
     def parameters(self):
