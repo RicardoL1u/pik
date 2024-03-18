@@ -1,9 +1,24 @@
 
 import glob
 import json
-import openai_proxy
+import pik.utils.openai_proxy as openai_proxy
 import re
 from tqdm import tqdm
+from pik.models.model import Model
+
+# Load the model
+llm = Model(
+    model_checkpoint='/workspace/MODELS/Qwen1.5-72B-chat',
+    generation_options= {
+        "max_new_tokens": 512,
+        "temperature": 1.0,
+    },
+    is_low_memory = False,
+    is_chat_model = True
+)
+
+
+
 training_files = glob.glob('data/bbh-new/*.json')
 
 training_files = [f for f in training_files if not f.endswith('_prompt.json') and not f.endswith('_result.json')]
@@ -23,7 +38,8 @@ for file in training_files:
     for data in tqdm(dataset, desc=f"Processing {file}",ncols=100):
         input_prompt = cot_prompt + '\n\nQ: ' + data['input'] + '\nA: Let\'s think step by step.'
         # print(input_prompt)
-        rationales = openai_proxy.chat_completion_use_cache(input_prompt, temperature=1, n=3)
+        # rationales = openai_proxy.chat_completion_use_cache(input_prompt, temperature=1, n=3)
+        rationales = llm.get_text_generation(input_prompt)
         # data['rationale'] = rationales
         
         # extracted_answer = re.search(r"[t|T]he answer is (.*?)\.", model_answer)
@@ -44,9 +60,9 @@ for file in training_files:
         ]
         
         prompt_list.append(input_prompt)
-    with open(f'data/bbh_cot/{task}_prompt.json', 'w') as f:
+    with open(f'data/bbh_cot/Qwen1.5-72B-chat/{task}_prompt.json', 'w') as f:
         json.dump(prompt_list, f, indent=4, ensure_ascii=False)
-    with open(f'data/bbh_cot/{task}_result.json', 'w') as f:
+    with open(f'data/bbh_cot/Qwen1.5-72B-chat/{task}_result.json', 'w') as f:
         json.dump(dataset, f, indent=4, ensure_ascii=False)
     
 

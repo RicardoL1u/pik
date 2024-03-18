@@ -45,7 +45,7 @@ class Model:
     Loads a language model from HuggingFace.
     Implements methods to extract the hidden states and generate text from a given input.
     '''
-    def __init__(self, model_checkpoint ,generation_options, is_low_memory=True):
+    def __init__(self, model_checkpoint ,generation_options, is_chat_model=False, is_low_memory=True):
         self.sampling_params = SamplingParams(
             n=generation_options.get('n', 1),
             max_tokens=generation_options.get('max_new_tokens', 16),
@@ -63,13 +63,43 @@ class Model:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
         
+        self.is_chat_model = is_chat_model
         self.is_low_memory = is_low_memory
         # Load model when needed
         self.model_checkpoint = model_checkpoint
         self.model = None
         self.vllm_model = None
 
+    
+    def preprocess_text(self, text: List[str] | str) -> List[str] | str:
+        # add chat template for chat model
+        if self.is_chat_model:
+            TEMPLATE = [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": None},
+            ]
+            if isinstance(text, list):
+                for i in range(len(text)):
+                    temp_text = text[i]
+                    template_copy = TEMPLATE.copy()
+                    template_copy[1]["content"] = temp_text
+                    text[i] = self.tokenizer.apply_chat_template(template_copy, tokenize=False, add_generation_prompt=True)
+            else:
+                template_copy = TEMPLATE.copy()
+                template_copy[1]["content"] = text
+                text = self.tokenizer.apply_chat_template(template_copy, tokenize=False, add_generation_prompt=True)
+            
+            test_text = text if isinstance(text, str) else text[0]
+            assert all([special_token in test_text for special_token in self.tokenizer.special_tokens_map['additional_special_tokens']]), 'Chat template not applied correctly'
+            
+        return text
+            
+            
+    
     def get_batch_MLP_activations(self, texts, batch_size=32, keep_all=True):
+        
+        texts = self.preprocess_text(texts)
+        
         if self.model is None:
             self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
             # add hook to the model
@@ -123,6 +153,9 @@ class Model:
             
             
     def get_batch_hidden_states(self, texts, batch_size=4, keep_all=True):
+        
+        texts = self.preprocess_text(texts)
+        
         # Method to process texts in batches
         if self.model is None:
             self.model: AutoModelForCausalLM = load_model(self.model_checkpoint, is_vllm=False)
@@ -167,6 +200,9 @@ class Model:
         return torch.cat(hidden_states_list, dim=0)
     
     def get_hidden_states(self, text_input, keep_all=True):
+        
+        text_input = self.preprocess_text(text_input)
+        
         # lazy load model
         if self.model is None:
             self.model = load_model(self.model_checkpoint, is_vllm=False)
@@ -184,6 +220,9 @@ class Model:
         return hidden_states
 
     def get_text_generation(self, text_input, normalize=False):
+        
+        text_input = self.preprocess_text(text_input)
+        
         # use vllm to generate text
         if self.vllm_model is None:
             self.vllm_model = load_model(self.model_checkpoint, is_vllm=True)
@@ -199,6 +238,9 @@ class Model:
         return output_text_list
 
     def get_batch_text_generation(self, text_input_list:List[str], normalize=False):
+        
+        text_input_list = self.preprocess_text(text_input_list)
+        
         if self.vllm_model is None:
             self.vllm_model = load_model(self.model_checkpoint, is_vllm=True)
         # use vllm to generate text
