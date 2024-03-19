@@ -1,4 +1,15 @@
 
+import re
+import random
+random.seed(42)
+
+def shuffle_dict(d):
+    keys = list(d.keys())
+    random.shuffle(keys)
+    shuffled_dict = {k: d[k] for k in keys}
+    return shuffled_dict
+
+
 
 
 def transform_to_bbh_movie_recommendation(origin):
@@ -101,6 +112,10 @@ def transform_to_bbh_snarks(origin):
 # Give me a python code to transform the origin json dict into BBH json dict format
 
 def transform_to_bbh_date_understanding(origin):
+    
+    # shuffle the target_scores
+    origin['target_scores'] = shuffle_dict(origin['target_scores'])
+    
     # Extracting the date from the input string
     date = origin['input']
     # Constructing the options list from the target_scores dictionary
@@ -150,6 +165,10 @@ def transform_to_bbh_date_understanding(origin):
 # Give me a python code to transform the origin json dict into BBH json dict format
 
 def transform_to_bbh_penguins_in_a_table(origin):
+    
+    # extract question
+    question = origin['input']                                                                                                   
+    
     # Extracting the animals from the target_scores dictionary
     animals = [animal for animal in origin['target_scores'] if origin['target_scores'][animal] == 1]
     # Constructing the options list from the target_scores dictionary
@@ -160,7 +179,7 @@ def transform_to_bbh_penguins_in_a_table(origin):
     target_index = chr(65 + list(origin['target_scores'].keys()).index(highest_score_animal))
     # Constructing the BBH dictionary format
     bbh = {
-        "input": f"Here is a table where the first line is a header and each subsequent line is a penguin:  name, age, height (cm), weight (kg) Louis, 7, 50, 11 Bernard, 5, 80, 13 Vincent, 9, 60, 11 Gwen, 8, 70, 15  For example: the age of Louis is 7, the weight of Gwen is 15 kg, the height of Bernard is 80 cm.  We now add a penguin to the table:\nJames, 12, 90, 12\nAnd here is a similar table, but listing giraffes:\nname, age, height (cm), weight (kg)\nJody, 5, 430, 620\nGladys, 10, 420, 590\nMarian, 2, 310, 410\nDonna, 9, 440, 650\nWhich is the oldest penguin?\nOptions:\n" + '\n'.join(options),
+        "input": f"Here is a table where the first line is a header and each subsequent line is a penguin:  name, age, height (cm), weight (kg) Louis, 7, 50, 11 Bernard, 5, 80, 13 Vincent, 9, 60, 11 Gwen, 8, 70, 15  For example: the age of Louis is 7, the weight of Gwen is 15 kg, the height of Bernard is 80 cm.  We now add a penguin to the table:\nJames, 12, 90, 12\nAnd here is a similar table, but listing giraffes:\nname, age, height (cm), weight (kg)\nJody, 5, 430, 620\nGladys, 10, 420, 590\nMarian, 2, 310, 410\nDonna, 9, 440, 650\n{question}\nOptions:\n" + '\n'.join(options),
         "target": f"({target_index})"
     }
     return bbh
@@ -348,7 +367,7 @@ def transform_to_bbh_formal_fallacies(origin):
     highest_score_argument = max(origin['target_scores'], key=origin['target_scores'].get)
     # Constructing the BBH dictionary format
     bbh = {
-        "input": f"{argument}" + '\n'.join(options),
+        "input": f"{argument}\nOptions:\n" + '\n'.join(options),
         "target": highest_score_argument
     }
     return bbh
@@ -462,6 +481,9 @@ def transform_to_bbh_logical_deduction_three_objects(origin):
 # Give me a python code to transform the origin json dict into BBH json dict format
 
 def transform_to_bbh_temporal_sequences(origin):
+    # shuffling the target_scores dictionary to get the options in a random order
+    origin['target_scores'] = shuffle_dict(origin['target_scores'])
+    
     # Extracting the times from the input string
     times = origin['input']
     # Constructing the options list from the target_scores dictionary
@@ -815,9 +837,21 @@ def transform_to_bbh_sports_understanding(origin):
 # }
 # Give me a python code to transform the origin json dict into BBH json dict format
 
+
+def remove_numeric_keys(d):
+    keys_to_remove = [k for k in d.keys() if k.isnumeric()]
+    for key in keys_to_remove:
+        del d[key]
+    return d
+
+
 def transform_to_bbh_reasoning_about_colored_objects(origin):
     # Extracting the objects from the input string
     objects = origin['input']
+    
+    # delete pure numeric keys
+    origin['target_scores'] = remove_numeric_keys(origin['target_scores'])
+    
     # Constructing the options list from the target_scores dictionary
     options = [f"({chr(65+i)}) {color}" for i, color in enumerate(origin['target_scores'].keys())]
     # Finding the color with the highest score
@@ -1143,9 +1177,13 @@ def transform_to_bbh_disambiguation_qa(origin):
 def transform_to_bbh_hyperbaton(origin):
     # Extracting sentences and their labels from the input string
     sentences = origin['input'].split('Which sentence has the correct adjective order: ')[1].split(' ?')[0].split(' \" ')
-    sentences = [sentence for sentence in sentences if sentence]  # Removing any empty strings
+    sentences = [sentence.strip() for sentence in sentences if len(sentence) > 5]  # Removing any empty strings
+    
+    # remove special characters at the begining and end of the sentence
+    sentences = [re.sub(r'^[^a-zA-Z0-9]+|[^a-zA-Z0-9]+$', '', sentence) for sentence in sentences]
+    
     # Constructing the options list from the sentences
-    options = [f"({chr(65+i)}) {sentence}" for i, sentence in enumerate(sentences) if i % 2 == 1]  # Only odd indices are sentences
+    options = [f"({chr(65+i)}) {sentence}" for i, sentence in enumerate(sentences)]
     # Finding the label with the highest score
     highest_score_label = max(origin['target_scores'], key=origin['target_scores'].get)
     # Constructing the target answer
