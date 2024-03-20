@@ -52,3 +52,12 @@ def load_dpo_dataset(
         dataset = dataset.select(range(min(len(dataset), 1000)))
     
     return dataset
+
+if __name__ == "__main__":
+    tokenizer = AutoTokenizer.from_pretrained("/data2/MODELS/Qwen1.5-0.5B-chat")
+    dataset = load_dpo_dataset(sanity_check=False, tokenizer=tokenizer).train_test_split(test_size=0.001, seed=42)
+    # split the dataset
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["test"]
+    print("Dataset: ", dataset)
+    

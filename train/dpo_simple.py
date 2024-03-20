@@ -156,8 +156,10 @@ if __name__ == "__main__":
     ################
     # Dataset
     ################
-    train_dataset = load_dpo_dataset(sanity_check=args.sanity_check, tokenizer=tokenizer)
-    eval_dataset = load_dpo_dataset(sanity_check=args.sanity_check, tokenizer=tokenizer)
+    dataset = load_dpo_dataset(sanity_check=False, tokenizer=tokenizer).train_test_split(test_size=0.15, seed=42)
+    # split the dataset
+    train_dataset = dataset["train"]
+    eval_dataset = dataset["test"]
 
     ################
     # Training
