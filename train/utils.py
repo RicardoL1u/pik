@@ -59,5 +59,9 @@ if __name__ == "__main__":
     # split the dataset
     train_dataset = dataset["train"]
     eval_dataset = dataset["test"]
+    print("Train dataset example: ")
+    print(json.dumps(train_dataset[0], indent=4))
+    print("Eval dataset example: ")
+    print(json.dumps(eval_dataset[0], indent=4))
     print("Dataset: ", dataset)
     
