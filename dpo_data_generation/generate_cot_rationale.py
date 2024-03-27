@@ -19,9 +19,10 @@ args = parser.parse_args()
 
 model_checkpoint = args.model_checkpoint
 model_name = Path(model_checkpoint).name
+prompt_folder_name = Path(args.prompt_dir).name
 target_bbh_dir = args.target_bbh_dir
-# output dir would be data/bbh-new/{MODEL_NAME}
-output_dir = os.path.join(target_bbh_dir, model_name)
+# output dir would be data/bbh-new/{MODEL_NAME}/{prompt_folder}/{task}.json
+output_dir = os.path.join(target_bbh_dir, model_name, prompt_folder_name)
 
 
 if not os.path.exists(output_dir):
@@ -71,11 +72,16 @@ for file in training_files:
     # check if the result file exists
     do_generate = True
     if os.path.exists(os.path.join(output_dir, f'{task}.json')):
-        print(f"Do not generate for {task}")
-        do_generate = False
-        dataset = json.load(open(os.path.join(output_dir, f'{task}.json')))
-        if "example" in dataset:
-            dataset = dataset["example"]
+        temp_dataset = json.load(open(os.path.join(output_dir, f'{task}.json')))        
+        if "example" in temp_dataset:
+            temp_dataset = temp_dataset["example"]
+        if len(temp_dataset) == len(dataset):
+            print(f"Do not generate for {task}")
+            do_generate = False
+            dataset = temp_dataset
+        else:
+            print(f"Re-generate for {task}")
+            del temp_dataset
     
     if args.debug:
         dataset = dataset[10:20]
