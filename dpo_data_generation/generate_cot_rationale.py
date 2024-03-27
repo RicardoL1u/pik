@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import pandas as pd
 import argparse
+from collections import defaultdict
 
 parser = argparse.ArgumentParser(description='Generate COT rationales')
 parser.add_argument('--model_checkpoint', type=str, default='/workspace/MODELS/Qwen1.5-72B-chat', help='Model checkpoint')
@@ -53,7 +54,7 @@ training_files = glob.glob(os.path.join(target_bbh_dir, '*.json'))
 training_files = [f for f in training_files if not f.endswith('_prompt.json') and not f.endswith('_result.json')]
 
 
-task2accuracy = {}
+task_data = defaultdict(dict)
 
 for file in training_files:
     # Task:
@@ -123,19 +124,25 @@ for file in training_files:
             for rationale, answer, is_correct in zip(rationales, answers, is_correct_list)
         ]
         
-    task2accuracy[task] = sum([r['rationale'][0]['is_correct'] for r in dataset]) / len(dataset)
-        
+    task_data[task]['accuracy'] = sum([r['rationale'][0]['is_correct'] for r in dataset]) / len(dataset)
+    task_data[task]['num_examples'] = len(dataset)
+    
     with open(os.path.join(output_dir, f'{task}.json'), 'w') as f:
         json.dump(dataset, f, indent=4, ensure_ascii=False)
 
-
-# convert task2accuracy to pandas dataframe
-df = pd.DataFrame(task2accuracy.items(), columns=['task', 'accuracy'])
+ 
+# convert task2accuracy to pandas dataframe [task, accuracy, num_examples]
+df = pd.DataFrame(task_data).T
+# df['task'] = df.index
 # convert to percentage then round to 2 decimal places
 df['accuracy'] = (df['accuracy'] * 100).round(2)
+
+# sort by task
+df = df.sort_index()
+
 print("The accuracy of the model on each task:")
 print(df)
 
 # save to csv
-df.to_csv(os.path.join(output_dir, 'accuracy.csv'), index=False)
+df.to_csv(os.path.join(output_dir, 'accuracy.csv'), index=True)
 
