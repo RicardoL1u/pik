@@ -15,6 +15,7 @@ parser = argparse.ArgumentParser(description='Generate COT rationales')
 parser.add_argument('--model_checkpoint', type=str, default='/workspace/MODELS/Qwen1.5-72B-chat', help='Model checkpoint')
 parser.add_argument('--prompt_dir', type=str, default='data/bbh/cot-prompts', help='Directory for COT prompts')
 parser.add_argument('--target_bbh_dir', type=str, default='data/bbh-new', help='Target directory for BBH data')
+parser.add_argument('--temperature', type=float, default=1.0, help='Temperature for generation')
 parser.add_argument('--debug', action='store_true', help='Debug mode')
 args = parser.parse_args()
 
@@ -22,9 +23,9 @@ model_checkpoint = args.model_checkpoint
 model_name = Path(model_checkpoint).name
 prompt_folder_name = Path(args.prompt_dir).name
 target_bbh_dir = args.target_bbh_dir
-# output dir would be data/bbh-new/{MODEL_NAME}/{prompt_folder}/{task}.json
-output_dir = os.path.join(target_bbh_dir, model_name, prompt_folder_name)
-
+# output dir would be data/bbh-new/{MODEL_NAME}/{prompt_folder}_{temperature}/{task}.json
+output_dir = os.path.join(target_bbh_dir, model_name, f'{prompt_folder_name}_{args.temperature}')
+temperature = args.temperature
 
 if not os.path.exists(output_dir):
     print(f"Creating output directory: {output_dir}")
@@ -34,7 +35,7 @@ print(f"Model checkpoint: {model_checkpoint}")
 print(f"Model name: {model_name}")
 print(f"Target BBH directory: {target_bbh_dir}")
 print(f"Output directory: {output_dir}")
-
+print(f"Prompt directory: {args.prompt_dir}")
 
 
 # Load the model
@@ -42,7 +43,7 @@ llm = Model(
     model_checkpoint=args.model_checkpoint,
     generation_options= {
         "max_new_tokens": 512,
-        "temperature": 1.0,
+        "temperature": temperature,
     },
     is_low_memory = False,
     is_chat_model = True
