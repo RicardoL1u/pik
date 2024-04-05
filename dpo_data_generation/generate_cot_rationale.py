@@ -46,9 +46,11 @@ llm = Model(
         "temperature": temperature,
     },
     is_low_memory = False,
-    is_chat_model = True
+    is_chat_model = 'chat' in model_name.lower()
 )
 
+
+FULL_ALPHABET_OPTIONS = {'(A)', '(B)', '(C)', '(D)', '(E)', '(F)', '(G)', '(H)', '(I)', '(J)', '(K)', '(L)', '(M)', '(N)', '(O)', '(P)', '(Q)', '(R)', '(S)', '(T)', '(U)', '(V)', '(W)', '(X)', '(Y)', '(Z)'}
 
 training_files = glob.glob(os.path.join(target_bbh_dir, '*.json'))
 
@@ -67,7 +69,7 @@ for file in training_files:
         dataset = dataset["examples"]
     # load the cot prompt from args.prompt_dir
     cot_prompt = open(os.path.join(args.prompt_dir, f'{task}.txt')).read()
-    
+        
     prompt_list = []
     result_list = []
     
@@ -115,7 +117,19 @@ for file in training_files:
                 answer = answer_split_new_line[-1]
             answers.append(answer)
             
-        is_correct_list = [data['target'] in answer for answer in answers]
+        is_correct_list = []
+        for answer in answers:
+            # special case for option (valid/invalid)
+            if data['target'] == 'valid':
+                is_correct = 'valid' in answer and 'invalid' not in answer
+            elif data['target'] == 'invalid':
+                is_correct = 'invalid' in answer
+            elif data['target'] in FULL_ALPHABET_OPTIONS:
+                is_correct = data['target'] in answer and all([option not in answer for option in FULL_ALPHABET_OPTIONS - {data['target']}])
+            else:
+                is_correct = data['target'] in answer
+            is_correct_list.append(is_correct) 
+                
         data['rationale'] = [
             {
                 'rationale': rationale,
