@@ -115,7 +115,11 @@ if __name__ == "__main__":
         device_map=get_kbit_device_map() if quantization_config is not None else None,
         quantization_config=quantization_config,
     )
-    model = AutoModelForCausalLM.from_pretrained(model_config.model_name_or_path, **model_kwargs)
+    
+    print("Model kwargs: ", model_kwargs)
+    
+    
+    model = AutoModelForCausalLM.from_pretrained(model_config.model_name_or_path, **model_kwargs).to("cuda")
     peft_config = get_peft_config(model_config)
     # peft_config.target_modules = [
     #         "q_proj",
@@ -156,7 +160,7 @@ if __name__ == "__main__":
     ################
     # Dataset
     ################
-    dataset = load_dpo_dataset(sanity_check=False, tokenizer=tokenizer).train_test_split(test_size=0.15, seed=42)
+    dataset = load_dpo_dataset(sanity_check=False, tokenizer=tokenizer).train_test_split(test_size=0.01, seed=42)
     # split the dataset
     train_dataset = dataset["train"]
     eval_dataset = dataset["test"]
