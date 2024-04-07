@@ -152,7 +152,7 @@ class Model:
         return torch.cat(mlp_activations_list, dim=0)
             
             
-    def get_batch_hidden_states(self, texts, batch_size=4, keep_all=True):
+    def get_batch_hidden_states(self, texts, batch_size=2, keep_all=True):
         
         texts = self.preprocess_text(texts)
         
@@ -188,12 +188,14 @@ class Model:
                 # Stack all layers of last token
                 # torch.stack(output.hidden_states, dim=1) (bsz, n_layers, seq_len, hidden_size)
                 # batch_states (bsz, n_layers, hidden_size)
-                batch_states = torch.stack(output.hidden_states, dim=1)[:, :, -1, :].squeeze()
-            
+                batch_states = torch.stack(output.hidden_states, dim=1)[:, :, -1, :].squeeze(-2)
+                assert batch_states.shape == (len(batch_texts), len(output.hidden_states), self.model.config.hidden_size), \
+                    f'batch_states shape: {batch_states.shape}, expected: {(len(batch_texts), len(output.hidden_states), self.model.config.hidden_size)}'
             logging.debug(f'shape of batch_states: {batch_states.shape}')
             
             hidden_states_list.append(batch_states.cpu())
             # release memory
+            # output = None
             batch_states = None
         # release memory
         self.model = None
