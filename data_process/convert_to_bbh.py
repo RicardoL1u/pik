@@ -77,10 +77,11 @@ def transform_to_bbh_boolean_expressions(origin):
 
 def transform_to_bbh_snarks(origin):
     # Extracting the statement from the input string
-    statement = origin['input'].split('?')[0] + "?"
+    statement = "Which statement is sarcastic?\nOptions:\n"
+    origin_option_content = origin['input'].split('sarcastic? ')[1].strip()
+    option_content = origin_option_content.replace('(a)', '(A)').replace('(b)', '\n(B)')
     # Constructing the options list from the keys in the target_scores dictionary
-    statement = statement + "\nOptions:\n" + origin['input'].split('?')[1].strip()
-    statement = statement.replace('(a)', '(A)').replace('(b)', '\n(B)')
+    statement = statement + option_content
     # Finding the statement with the highest score
     highest_score_statement = max(origin['target_scores'], key=origin['target_scores'].get)
     # Capitalizing the highest score statement to construct the target answer
