@@ -95,8 +95,8 @@ def main():
     # delete_old = input("Delete old PyTorch files? (Y/N): ").strip().upper() == 'Y'
 
     parser = argparse.ArgumentParser(description='Convert PyTorch model files to SafeTensors format.')
-    parser.add_argument('source_folder', type=str, help='Source folder for PyTorch files')
-    parser.add_argument('dest_folder', type=str, help='Destination folder for SafeTensors files')
+    parser.add_argument('--source_folder', type=str, help='Source folder for PyTorch files')
+    parser.add_argument('--dest_folder', type=str, help='Destination folder for SafeTensors files')
     parser.add_argument('--delete_old', action='store_true', help='Delete old PyTorch files')
     args = parser.parse_args()
     source_folder = args.source_folder
