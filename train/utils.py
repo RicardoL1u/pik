@@ -1,6 +1,7 @@
 from transformers import AutoTokenizer
 from datasets import Dataset
 import json
+import argparse
 
 def load_dpo_dataset(
     sanity_check: bool = False,
@@ -21,7 +22,7 @@ def load_dpo_dataset(
     
 
 
-    with open("./one_in_all_dpo.json", "r") as f:
+    with open("./one_in_all_dpo_True.json", "r") as f:
         data = json.load(f)
 
     final_data_list = []
@@ -54,7 +55,12 @@ def load_dpo_dataset(
     return dataset
 
 if __name__ == "__main__":
-    tokenizer = AutoTokenizer.from_pretrained("/data2/MODELS/Qwen1.5-0.5B-chat")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, default="/workspace/MODELS/llama-2-70b-chat")
+    args = parser.parse_args()
+    model_name = args.model_name
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    
     dataset = load_dpo_dataset(sanity_check=False, tokenizer=tokenizer).train_test_split(test_size=0.001, seed=42)
     # split the dataset
     train_dataset = dataset["train"]
