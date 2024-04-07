@@ -11,6 +11,23 @@ import pandas as pd
 import argparse
 from collections import defaultdict
 
+
+def extract_options_content(string):
+    # Regex pattern
+    pattern = r'\([A-Z]\)\s+(.*)'
+
+    # Extract options and dates
+    matches = re.findall(pattern, string)
+
+    # Print options and dates
+    # for i, match in enumerate(matches):
+    #     print(f"Option ({chr(65 + i)}): {match}")
+    
+    return {
+        f"({chr(65 + i)})": match.strip()
+        for i, match in enumerate(matches)
+    }
+
 parser = argparse.ArgumentParser(description='Generate COT rationales')
 parser.add_argument('--model_checkpoint', type=str, default='/workspace/MODELS/Qwen1.5-72B-chat', help='Model checkpoint')
 parser.add_argument('--prompt_dir', type=str, default='data/bbh/cot-prompts', help='Directory for COT prompts')
@@ -49,6 +66,7 @@ llm = Model(
     is_chat_model = 'chat' in model_name.lower()
 )
 
+# llm = None
 
 FULL_ALPHABET_OPTIONS = {'(A)', '(B)', '(C)', '(D)', '(E)', '(F)', '(G)', '(H)', '(I)', '(J)', '(K)', '(L)', '(M)', '(N)', '(O)', '(P)', '(Q)', '(R)', '(S)', '(T)', '(U)', '(V)', '(W)', '(X)', '(Y)', '(Z)'}
 
@@ -111,7 +129,8 @@ for file in training_files:
             answer_split_new_line = rationale.split('\n\n')
             
             # use the one with the least number of words in the last sentence
-            if len(answer_split_dot[-1].split()) < len(answer_split_new_line[-1].split()):
+            if len(answer_split_dot[-1].split()) < len(answer_split_new_line[-1].split()) and \
+                len(answer_split_dot[-1].split()) > 1: # special check for the last sentence with only 1 word
                 answer = answer_split_dot[-1]
             else:
                 answer = answer_split_new_line[-1]
@@ -124,8 +143,23 @@ for file in training_files:
                 is_correct = 'valid' in answer and 'invalid' not in answer
             elif data['target'] == 'invalid':
                 is_correct = 'invalid' in answer
+            elif task == 'web_of_lies':
+                if data['target'] == 'No':
+                    is_correct = ('not' in answer and 'tell' in answer and 'truth' in answer) or ('False' in answer)
+                elif data['target'] == 'Yes':
+                    is_correct = ('tell' in answer and 'truth' in answer and 'not' not in answer) or ('True' in answer)
+            elif task == 'sports_understanding':
+                not_pasuible = ('not' in answer and 'pausible' in answer) or ('not' not in answer and 'implausible' in answer) or ('unlikely' in answer) or ('unusual' in answer) or ('not' in answer and 'accurate' in answer) or ("incorrect" in answer)
+                # data['target'] would be 'no' and 'yes'
+                is_correct = (data['target'] == 'no' and not_pasuible) or (data['target'] == 'yes' and not not_pasuible)
+            # elif task == 'dyck_languages':
+                
             elif data['target'] in FULL_ALPHABET_OPTIONS:
-                is_correct = data['target'] in answer and all([option not in answer for option in FULL_ALPHABET_OPTIONS - {data['target']}])
+                options_content = extract_options_content(data['input'])
+                all_option_content = set(options_content.values())
+                target_content = options_content[data['target']]
+                is_correct = (data['target'] in answer and all([option not in answer for option in FULL_ALPHABET_OPTIONS - {data['target']}])) or \
+                    (target_content in answer and all([option not in answer for option in all_option_content - {target_content}]))
             else:
                 is_correct = data['target'] in answer
             is_correct_list.append(is_correct) 
