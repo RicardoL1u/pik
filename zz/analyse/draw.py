@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 BBH_ACL_FOLDER = "../../data/bbh/bbh-acl"
 
-BBH_NEW_FOLDER = "../../data/bbh/bbh-new"
+# BBH_NEW_FOLDER = "../../data/bbh/bbh-new"
 
 # BBH_ACL_FOLDER = "../../../evaluate/data/bbh/bbh-acl"
 
@@ -16,35 +16,35 @@ def get_file_name(folder):
     for file in os.listdir(folder):
         if os.path.isdir(os.path.join(folder, file)):
             name_list.append(file)
-    print(name_list)
+    print(sorted(name_list))
 
 
-# get_file_name(BBH_NEW_FOLDER)
+get_file_name(BBH_ACL_FOLDER)
+
+# exit()
 
 NOW_FOLDER = BBH_ACL_FOLDER
 
 origin_gemma_file = "pretrained-google-gemma-2b_0.0"
 
 before_dpo_file_list = [
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-20_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-60_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-100_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-140_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-180_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-220_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-260_0.0",
-    "output-gemma-2b-v0-20240405-043742-before-dpo-checkpoint-288_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-140_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-180_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-200_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-220_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-240_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-260_0.0",
+    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-280_0.0",
 ]
 
 after_dpo_file_list = [
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-20_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-60_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-100_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-140_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-180_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-220_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-260_0.0",
-    "output-gemma-2b-v1-20240405-053307-after-dpo-checkpoint-288_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-140_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-180_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-200_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-220_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-240_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-260_0.0",
+    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-280_0.0",
 ]
 
 fig_length = len(after_dpo_file_list) // 3
@@ -57,7 +57,7 @@ ax = ax.flatten()
 final_df = pd.read_csv(
     os.path.join(NOW_FOLDER, origin_gemma_file, "accuracy.csv"), index_col=0
 )
-final_df = final_df[["accuracy"]]
+final_df = final_df[["accuracy", "num_examples"]]
 final_df.rename(columns={"accuracy": "pretrained"}, inplace=True)
 
 for file in before_dpo_file_list:
@@ -135,8 +135,10 @@ for i in range(color_index):
     )
 
 fig.subplots_adjust(bottom=0.25)
-fig.suptitle(NOW_FOLDER.split("/")[-1])
+fig.suptitle("bbh-acl")
 fig.tight_layout()
-fig.savefig(NOW_FOLDER.split("/")[-1] + ".png")
+fig.savefig("bbh-acl_20240410.png")
 
-print(final_df.mean(axis=0))
+num_samples_sum = final_df["num_examples"].sum()
+temp_df = final_df * final_df["num_examples"].values.reshape(-1, 1)
+print(temp_df.sum() / num_samples_sum)

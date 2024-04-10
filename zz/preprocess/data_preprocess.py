@@ -2,7 +2,7 @@ import os
 import json
 from tqdm import tqdm
 
-DATA_PATH = "../data/20240304"
+DATA_PATH = "../data/20240407"
 ORI_DATA_PATH = "ori"
 MODEL_DATA_PATH = "model"
 
