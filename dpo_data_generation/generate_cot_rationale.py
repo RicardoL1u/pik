@@ -117,15 +117,18 @@ if __name__ == "__main__":
 
 
     # Load the model
-    llm = Model(
-        model_checkpoint=args.model_checkpoint,
-        generation_options= {
-            "max_new_tokens": 512,
-            "temperature": temperature,
-        },
-        is_low_memory = False,
-        is_chat_model = 'chat' in model_name.lower()
-    )
+    if model_checkpoint == 'gpt-3.5-turbo':
+        llm = None
+    else:
+        llm = Model(
+            model_checkpoint=args.model_checkpoint,
+            generation_options= {
+                "max_new_tokens": 512,
+                "temperature": temperature,
+            },
+            is_low_memory = False,
+            is_chat_model = 'chat' in model_name.lower()
+        )
 
     # llm = None
 
@@ -166,24 +169,29 @@ if __name__ == "__main__":
                 print(f"Re-generate for {task}")
                 del temp_dataset
         
+        print(f"Do generate: {do_generate}")
+        
         if args.debug:
             dataset = dataset[10:20]
         
+        print(f"Number of examples: {len(dataset)}")
         for data in tqdm(dataset, desc=f"Processing {file}",ncols=100):
             input_prompt = cot_prompt + '\n\nQ: ' + data['input'] + '\nA: Let\'s think step by step.'
             # print(input_prompt)
-            # rationales = openai_proxy.chat_completion_use_cache(input_prompt, temperature=1, n=3)
-            if do_generate:
-                rationales = llm.get_text_generation(input_prompt)
+            if model_checkpoint == 'gpt-3.5-turbo':
+                rationales = openai_proxy.chat_completion_use_cache(input_prompt, temperature=1, n=3)
             else:
-                rationales = [r['rationale'] for r in data['rationale']]
+                if do_generate:
+                    rationales = llm.get_text_generation(input_prompt)
+                else:
+                    rationales = [r['rationale'] for r in data['rationale']]
 
             
             # extracted_answer = re.search(r"[t|T]he answer is (.*?)\.", model_answer)
             # answers = [rationale.split('.')[-1] for rationale in rationales]
             data['rationale'] = []
             for rationale in rationales:
-                is_correct = check_response(rationale, data['target'], task)
+                is_correct = check_response(rationale, data['input'], data['target'], task)
                 data['rationale'].append({
                     'rationale': rationale,
                     'answer': extract_answer_from_rationale(rationale),
