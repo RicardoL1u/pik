@@ -28,6 +28,7 @@ class GenerateArguments:
 
 @dataclass
 class ScriptArguments:
+    example_dir: str = field(required=True, metadata={"help": "directory for saving examples"})
     debug: bool = field(default=False, metadata={"help": "Debug mode."})
     mlp: bool = field(default=False, metadata={"help": "set to True to use MLP activation hook"})
     device: str = field(default='cuda', metadata={"help": "Device to use."})

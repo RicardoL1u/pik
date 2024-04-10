@@ -27,13 +27,13 @@ from pik.utils.arguments import (
     ScriptArguments
 )
 
-def process_task(task, training_file, test_dataset, language_model, probing_model, gen_args, probe_args):
+def process_task(task, example_dir, training_file, test_dataset, language_model, probing_model, gen_args, probe_args):
     training_dataset = json.load(open(training_file))
     task2instr = json.load(open("temp_data/bbh/cot/task2instr.json"))
     template = open("temp_data/bbh/cot/template.txt").read()
 
     
-    output_path = f"temp_data/bbh/cot/bbh-new/gpt-3.5-turbo/cot-prompts-3-shot/rating/{task}_rationale.json"
+    output_path = f"{example_dir}/rating/{task}_rationale.json"
     if os.path.exists(output_path):
         logging.info(f"Skipping {task} as it already exists")
         return
@@ -76,7 +76,7 @@ def process_task(task, training_file, test_dataset, language_model, probing_mode
     total_detail_preds = torch.cat(total_detail_preds, dim=0)
     total_detail_preds = total_detail_preds.view(len(training_dataset), len(example['rationale']), -1)
     # save the detailed predictions
-    torch.save(total_detail_preds, f"temp_data/bbh/cot/bbh-new/gpt-3.5-turbo/cot-prompts-3-shot/rating/{task}_detailed_preds.pt")
+    torch.save(total_detail_preds, f"{example_dir}/rating/{task}_detailed_preds.pt")
     
     with open(output_path,"w") as f:
         json.dump(training_dataset, f, indent=4, ensure_ascii=False)
@@ -117,15 +117,19 @@ if __name__ == "__main__":
     probe_args.device = script_args.device
     gen_args.mlp = False
 
+    example_dir = script_args.example_dir
+    
     logging.basicConfig(
         format="[generate:%(filename)s:L%(lineno)d] %(levelname)-6s %(message)s",
         level=logging.INFO if not script_args.debug else logging.DEBUG
     )
 
+    logging.info("Example directory: %s", example_dir)
+
     probing_model = setup_probe_model(probe_args)
     language_model = setup_llm_model(gen_args)
 
-    training_files = glob.glob('temp_data/bbh/cot/bbh-new/gpt-3.5-turbo/cot-prompts-3-shot/*.json')
+    training_files = glob.glob(f'{example_dir}/*.json')
     training_files = [f for f in training_files if "_rationale" not in f and '_result' not in f]
     
     
@@ -136,4 +140,4 @@ if __name__ == "__main__":
         task = training_file.split('/')[-1].split('.')[0]
         print("Processing task:", task)
         test_dataset = json.load(open(f"temp_data/bbh/cot/bbh-acl/files/{task}.json"))
-        process_task(task, training_file, test_dataset, language_model, probing_model, gen_args, probe_args)
+        process_task(task, example_dir, training_file, test_dataset, language_model, probing_model, gen_args, probe_args)
