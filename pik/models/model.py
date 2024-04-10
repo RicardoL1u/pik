@@ -240,14 +240,14 @@ class Model:
             return [normalize_answer(output_text) for output_text in output_text_list]
         return output_text_list
 
-    def get_batch_text_generation(self, text_input_list:List[str], normalize=False):
+    def get_batch_text_generation(self, text_input_list:List[str], normalize=False, use_tqdm=True):
         
         text_input_list = self.preprocess_text(text_input_list)
         
         if self.vllm_model is None:
             self.vllm_model = load_model(self.model_checkpoint, is_vllm=True)
         # use vllm to generate text
-        generation = self.vllm_model.generate(text_input_list, self.sampling_params)
+        generation = self.vllm_model.generate(text_input_list, self.sampling_params,use_tqdm=use_tqdm)
 
         # extract 
         output_text_list = [
