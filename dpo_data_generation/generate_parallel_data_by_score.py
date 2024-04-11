@@ -5,6 +5,7 @@ import random
 import glob
 import pandas as pd
 from collections import defaultdict
+from typing import List
 random.seed(42)
 task2instr = json.load(open("data/bbh_dpo/template/task2instr.json"))
 
@@ -22,17 +23,33 @@ def add_id_to_example(example:dict):
     id = hashlib.sha256(json.dumps(meta_data).encode()).hexdigest()
     return {"id": id, **example}
 
-def generate_one_dpo_example(task, golden_rationale, bad_rationale):
-    chosen_rationale = golden_rationale['rationale'][0]['rationale']
-    reject_rationale = random.choice(list(bad_rationale['rationale'].values()))
-    return {
-        "id": golden_rationale["id"],
-        "task": task,
-        "instruction": task2instr[task],
-        "input": golden_rationale["input"],
-        "output":[chosen_rationale, reject_rationale],
-        "is_correct": golden_rationale['rationale'][0]["is_correct"]
-    }
+def generate_dpo_examples(task, origin_example):
+    
+    to_chosen_rationales = [r for r in origin_example['rationale'] if r['is_correct']]
+    full_rationales = origin_example['rationale']
+    
+    dpo_examples = []
+    for chosen_rationale in to_chosen_rationales:
+        chosen_rationale_text = chosen_rationale['rationale']
+        chosen_score = chosen_rationale['consistency']
+        
+        for rationale in full_rationales:
+            reject_rationale_text = rationale['rationale']
+            reject_score = rationale['consistency']
+            if reject_score > chosen_score or reject_rationale_text == chosen_rationale_text: 
+                continue
+            dpo_examples.append({
+                "id": origin_example["id"] + f"_{len(dpo_examples)}",
+                "task": task,
+                "instruction": task2instr[task],
+                "input": origin_example["input"],
+                "output":[chosen_rationale_text, reject_rationale_text],
+                "is_correct": [chosen_rationale['is_correct'], rationale['is_correct']],
+                "score": [chosen_score, reject_score],
+            })
+    
+    return dpo_examples
+    
     
     
 def get_the_intersections_of_two_lists(list1, list2):
@@ -41,34 +58,21 @@ def get_the_intersections_of_two_lists(list1, list2):
 
 
 def process_task(task, use_correct_rationale):
-    # get the golden rationale
-    golden_rationale = json.load(open(f'data/bbh_cot/Qwen1.5-72B-chat/{task}_result.json'))
+    
+    
+    examples = json.load(open(f'temp_data/bbh/cot/bbh-new/gpt-3.5-turbo/cot-prompts-3-shot/rating/{task}_rationale.json'))
+    
     # add id to the examples
-    golden_rationale = [add_id_to_example(example) for example in golden_rationale]
+    examples = [add_id_to_example(example) for example in examples]
     # sort the examples by id
-    golden_rationale = sorted(golden_rationale, key=lambda x: x["id"])
+    examples = sorted(examples, key=lambda x: x["id"])
+    
+    # filter out the examples that are not correct
+    if use_correct_rationale:
+        examples = [ex for ex in examples if any([r['is_correct'] for r in ex['rationale']])]
     
     
-    # get the bad rationale
-    bad_rationale = json.load(open(f'data/bbh_dpo/{task}_rationale.json'))
-    # add id to the examples
-    bad_rationale = [add_id_to_example(example) for example in bad_rationale]
-    # sort the examples by id
-    bad_rationale = sorted(bad_rationale, key=lambda x: x["id"])
-    
-    # get the intersection of the two lists
-    common_ids = get_the_intersections_of_two_lists([example["id"] for example in golden_rationale], [example["id"] for example in bad_rationale])
-    print(f"Task {task} has {len(common_ids)} common ids")
-    
-    # filter the examples
-    golden_rationale = [example for example in golden_rationale if example["id"] in common_ids]
-    bad_rationale = [example for example in bad_rationale if example["id"] in common_ids]
-    
-    
-    assert len(golden_rationale) == len(bad_rationale), f"Task {task} has different number of examples in golden {len(golden_rationale)} and bad {len(bad_rationale)} rationales"
-    assert all(golden["id"] == bad["id"] for golden, bad in zip(golden_rationale, bad_rationale)), "Golden and bad rationales are not aligned"
-    
-    dpo_dataset = [generate_one_dpo_example(task, golden, bad) for golden, bad in zip(golden_rationale, bad_rationale) if not use_correct_rationale or golden["rationale"][0]["is_correct"]]
+    dpo_dataset = sum([generate_dpo_examples(task, rationale) for rationale in examples ], [])
     
     return dpo_dataset
     
@@ -78,19 +82,18 @@ def main():
     args = parse_args()
     ood_task_list = json.load(open(args.ood_task_list))
     one_in_all_dpo_dataset = []
-    for file in glob.glob('data/bbh_cot/Qwen1.5-72B-chat/*_result.json'):
-        task = file.split('/')[-1].replace('_result.json', '')
+    for task in json.load(open('dpo_data_generation/task.json')):
         if task in ood_task_list:
             print(f"Skipping OOD task {task}")
             continue
         dpo_dataset = process_task(task, args.use_correct_rationale)
-        with open(f'data/bbh_dpo_finetune_data/{task}_dpo.json', 'w') as f:
+        with open(f'temp_data/bbh/training/{task}_dpo.json', 'w') as f:
             json.dump(dpo_dataset, f, indent=4, ensure_ascii=False)
         print(f"Task {task} has {len(dpo_dataset)} examples")
         one_in_all_dpo_dataset.extend(dpo_dataset)
     
     random.shuffle(one_in_all_dpo_dataset)
-    output_file = f'data/bbh_training_data/one_in_all_dpo_{args.use_correct_rationale}.json'
+    output_file = f'temp_data/bbh/training/one_in_all_dpo_{args.use_correct_rationale}.json'
     with open(output_file, 'w') as f:
         json.dump(one_in_all_dpo_dataset, f, indent=4, ensure_ascii=False)
     
@@ -116,7 +119,7 @@ def main():
     # sort by the dictionary order of the task
     task_analysis = task_analysis.sort_index()
     
-    task_analysis.to_csv(f'data/bbh_training_data/one_in_all_dpo_{args.use_correct_rationale}_analysis.csv')
+    task_analysis.to_csv(f'temp_data/bbh/training/one_in_all_dpo_{args.use_correct_rationale}_analysis.csv')
     
     
     pass
