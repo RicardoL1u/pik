@@ -12,6 +12,9 @@ task2instr = json.load(open("data/bbh_dpo/template/task2instr.json"))
 def parse_args():
     parser = argparse.ArgumentParser(description="Generate parallel data for DPO")
     parser.add_argument("--use_correct_rationale", action="store_true", help="Use correct rationale")
+    parser.add_argument("--score_file_dir", type=str, help="directory containing the score files")
+    parser.add_argument("--output_dir", type=str, help="directory to save the output files")
+    parser.add_argument("--score_key", type=str, help="key to extract the score from the score file")
     parser.add_argument("--ood_task_list", type=str, help="json file containing the list of OOD tasks")
     return parser.parse_args()
 
@@ -23,7 +26,7 @@ def add_id_to_example(example:dict):
     id = hashlib.sha256(json.dumps(meta_data).encode()).hexdigest()
     return {"id": id, **example}
 
-def generate_dpo_examples(task, origin_example):
+def generate_dpo_examples(task, score_key, origin_example):
     
     to_chosen_rationales = [r for r in origin_example['rationale'] if r['is_correct']]
     full_rationales = origin_example['rationale']
@@ -31,12 +34,12 @@ def generate_dpo_examples(task, origin_example):
     dpo_examples = []
     for chosen_rationale in to_chosen_rationales:
         chosen_rationale_text = chosen_rationale['rationale']
-        chosen_score = chosen_rationale['consistency']
+        chosen_score = chosen_rationale[score_key]
         
         for rationale in full_rationales:
             reject_rationale_text = rationale['rationale']
-            reject_score = rationale['consistency']
-            if reject_score > chosen_score or reject_rationale_text == chosen_rationale_text: 
+            reject_score = rationale[score_key]
+            if reject_score >= chosen_score - 0.01 or reject_rationale_text == chosen_rationale_text: 
                 continue
             dpo_examples.append({
                 "id": origin_example["id"] + f"_{len(dpo_examples)}",
@@ -57,10 +60,10 @@ def get_the_intersections_of_two_lists(list1, list2):
 
 
 
-def process_task(task, use_correct_rationale):
+def process_task(task, score_file_dir, score_key, use_correct_rationale):
     
     
-    examples = json.load(open(f'temp_data/bbh/cot/bbh-new/gpt-3.5-turbo/cot-prompts-3-shot/rating/{task}_rationale.json'))
+    examples = json.load(open(f'{score_file_dir}/{task}_rationale.json'))
     
     # add id to the examples
     examples = [add_id_to_example(example) for example in examples]
@@ -72,7 +75,7 @@ def process_task(task, use_correct_rationale):
         examples = [ex for ex in examples if any([r['is_correct'] for r in ex['rationale']])]
     
     
-    dpo_dataset = sum([generate_dpo_examples(task, rationale) for rationale in examples ], [])
+    dpo_dataset = sum([generate_dpo_examples(task, score_key, rationale) for rationale in examples ], [])
     
     return dpo_dataset
     
@@ -86,14 +89,15 @@ def main():
         if task in ood_task_list:
             print(f"Skipping OOD task {task}")
             continue
-        dpo_dataset = process_task(task, args.use_correct_rationale)
-        with open(f'temp_data/bbh/training/{task}_dpo.json', 'w') as f:
+        dpo_dataset = process_task(task, args.score_file_dir, args.score_key, args.use_correct_rationale)
+        with open(f'{args.output_dir}/{task}_dpo.json', 'w') as f:
             json.dump(dpo_dataset, f, indent=4, ensure_ascii=False)
         print(f"Task {task} has {len(dpo_dataset)} examples")
         one_in_all_dpo_dataset.extend(dpo_dataset)
     
+    print(f"Total number of examples: {len(one_in_all_dpo_dataset)}")
     random.shuffle(one_in_all_dpo_dataset)
-    output_file = f'temp_data/bbh/training/one_in_all_dpo_{args.use_correct_rationale}.json'
+    output_file = f'{args.output_dir}/one_in_all_dpo_{args.use_correct_rationale}_Qwen.json'
     with open(output_file, 'w') as f:
         json.dump(one_in_all_dpo_dataset, f, indent=4, ensure_ascii=False)
     
@@ -119,7 +123,7 @@ def main():
     # sort by the dictionary order of the task
     task_analysis = task_analysis.sort_index()
     
-    task_analysis.to_csv(f'temp_data/bbh/training/one_in_all_dpo_{args.use_correct_rationale}_analysis.csv')
+    task_analysis.to_csv(f'{args.output_dir}/one_in_all_dpo_{args.use_correct_rationale}_Qwen_analysis.csv')
     
     
     pass
