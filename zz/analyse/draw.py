@@ -28,23 +28,33 @@ NOW_FOLDER = BBH_ACL_FOLDER
 origin_gemma_file = "pretrained-google-gemma-2b_0.0"
 
 before_dpo_file_list = [
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-140_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-180_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-200_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-220_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-240_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-260_0.0",
-    "output-gemma-2b-v10-20240408-223344-before-dpo-checkpoint-280_0.0",
+    "v2-20240412-225031_checkpoint-100_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-120_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-140_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-160_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-180_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-200_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-220_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-240_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-260_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-280_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-300_cot-prompts-0-shot_0.0_before",
+    "v2-20240412-225031_checkpoint-320_cot-prompts-0-shot_0.0_before",
 ]
 
 after_dpo_file_list = [
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-140_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-180_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-200_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-220_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-240_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-260_0.0",
-    "output-gemma-2b-v11-20240408-223355-after-dpo-checkpoint-280_0.0",
+    "v3-20240412-225052_checkpoint-100_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-120_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-140_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-160_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-180_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-200_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-220_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-240_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-260_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-280_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-300_cot-prompts-0-shot_0.0_after",
+    "v3-20240412-225052_checkpoint-320_cot-prompts-0-shot_0.0_after",
 ]
 
 fig_length = len(after_dpo_file_list) // 3
@@ -64,7 +74,7 @@ for file in before_dpo_file_list:
     df = pd.read_csv(os.path.join(NOW_FOLDER, file, "accuracy.csv"), index_col=0)
     df = df[["accuracy"]]
     df.rename(
-        columns={"accuracy": file.split("-")[-4] + "-" + file.split("-")[-1]},
+        columns={"accuracy": file.split("_")[1] + "-" + file.split("_")[-1]},
         inplace=True,
     )
     final_df = pd.concat([final_df, df], axis=1)
@@ -73,7 +83,7 @@ for file in after_dpo_file_list:
     df = pd.read_csv(os.path.join(NOW_FOLDER, file, "accuracy.csv"), index_col=0)
     df = df[["accuracy"]]
     df.rename(
-        columns={"accuracy": file.split("-")[-4] + "-" + file.split("-")[-1]},
+        columns={"accuracy": file.split("_")[1] + "-" + file.split("_")[-1]},
         inplace=True,
     )
     final_df = pd.concat([final_df, df], axis=1)
@@ -102,7 +112,7 @@ color_index = 0
 color_map = {}
 for column in final_df.columns:
     if "before" in column:
-        now_ckpt = int(column.split("-")[1].split("_")[0])
+        now_ckpt = int(column.split("_")[0].split("-")[1])
         if now_ckpt not in color_map:
             color_map[now_ckpt] = color_list[color_index]
             color_index += 1
@@ -114,7 +124,7 @@ for column in final_df.columns:
             alpha=0.3,
         )
     elif "after" in column:
-        now_ckpt = int(column.split("-")[1].split("_")[0])
+        now_ckpt = int(column.split("_")[0].split("-")[1])
         if now_ckpt not in color_map:
             color_map[now_ckpt] = color_list[color_index]
             color_index += 1
@@ -137,7 +147,7 @@ for i in range(color_index):
 fig.subplots_adjust(bottom=0.25)
 fig.suptitle("bbh-acl")
 fig.tight_layout()
-fig.savefig("bbh-acl_20240410.png")
+fig.savefig("bbh-acl_20240413.png")
 
 num_samples_sum = final_df["num_examples"].sum()
 temp_df = final_df * final_df["num_examples"].values.reshape(-1, 1)
